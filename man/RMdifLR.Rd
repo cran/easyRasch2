@@ -9,7 +9,7 @@ RMdifLR(
   dif_var,
   model = c("auto", "PCM", "RM"),
   level = c("item", "threshold"),
-  output = c("ggplot", "kable", "dataframe"),
+  output = c("kable", "dataframe", "ggplot"),
   cutoff = 0.5,
   conf = 0.95,
   sort = FALSE
@@ -38,8 +38,8 @@ dichotomous (max response = 1) and \code{eRm::PCM()} otherwise.
 dichotomous (RM) data the two views are equivalent (one threshold per
 item).}
 
-\item{output}{One of \code{"ggplot"} (default), \code{"kable"}, or
-\code{"dataframe"}. The data.frame view always carries a
+\item{output}{One of \code{"kable"} (default), \code{"dataframe"}, or
+\code{"ggplot"}. The data.frame view always carries a
 \code{Flagged} logical column; the kable view bolds flagged rows; the
 ggplot view shows confidence intervals.}
 
@@ -101,21 +101,25 @@ kable renders correctly in HTML, LaTeX, and pipe/markdown.
 }
 \examples{
 \donttest{
-set.seed(1)
-data("pcmdat2", package = "eRm")
-grp <- factor(sample(c("A", "B"), nrow(pcmdat2), replace = TRUE))
+if (requireNamespace("eRm", quietly = TRUE)) {
+  set.seed(1)
+  data("pcmdat2", package = "eRm")
+  grp <- factor(sample(c("A", "B"), nrow(pcmdat2), replace = TRUE))
 
-# Default: ggplot panel of item locations with 95\% CIs
-RMdifLR(pcmdat2, dif_var = grp)
+  # Default: kable of per-group item locations
+  RMdifLR(pcmdat2, dif_var = grp)
 
-# Threshold-level kable, sorted by MaxDiff
-RMdifLR(pcmdat2, dif_var = grp,
-        level = "threshold", output = "kable", sort = TRUE)
+  # ggplot panel of item locations with 95\% CIs
+  RMdifLR(pcmdat2, dif_var = grp, output = "ggplot")
 
-# Tidy data.frame for downstream use
-df <- RMdifLR(pcmdat2, dif_var = grp, output = "dataframe")
-attr(df, "lr_test")
-df[df$Flagged, ]
+  # Threshold-level kable, sorted by MaxDiff
+  RMdifLR(pcmdat2, dif_var = grp, level = "threshold", sort = TRUE)
+
+  # Tidy data.frame for downstream use
+  df <- RMdifLR(pcmdat2, dif_var = grp, output = "dataframe")
+  attr(df, "lr_test")
+  df[df$Flagged, ]
+}
 }
 
 }

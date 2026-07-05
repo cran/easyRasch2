@@ -2,7 +2,7 @@
 % Please edit documentation in R/locdep_q3_plot.R
 \name{RMlocdepQ3Plot}
 \alias{RMlocdepQ3Plot}
-\title{Plot Distribution of Simulated Q3 Residual Correlations}
+\title{Plot Distribution of Simulated \eqn{Q_3} Residual Correlations}
 \usage{
 RMlocdepQ3Plot(simfit, data, items = NULL, n_pairs = NULL)
 }
@@ -12,9 +12,9 @@ with components \code{pair_results}, \code{pair_cutoffs}, \code{actual_iteration
 \code{sample_n}, and \code{item_names}).}
 
 \item{data}{Optional. A data.frame or matrix of item responses for
-computing and overlaying observed Q3 values. Items must be scored
+computing and overlaying observed \eqn{Q_3} values. Items must be scored
 starting at 0 (non-negative integers). When provided, the plot
-includes orange diamond markers for the observed Q3 alongside the
+includes orange diamond markers for the observed \eqn{Q_3} alongside the
 simulated distribution, plus segment summaries from the cutoff
 intervals.}
 
@@ -30,12 +30,21 @@ null are plotted, sorted by \verb{|observed Q3 - median(simulated Q3 per pair)|}
 of available pairs are silently capped.}
 }
 \value{
-A \code{ggplot} object.
+A named list of two \code{ggplot} objects (mirroring the \verb{$matrix} /
+\verb{$pairs} structure of \code{\link{RMlocdepQ3}}'s table output):
+\describe{
+\item{\verb{$pairs}}{the per-pair plot described below (always returned).}
+\item{\verb{$matrix}}{a lower-triangle tile heatmap of the \strong{observed} \eqn{Q_3}
+matrix, with pairs above the global dynamic cut-off outlined. This
+needs the observed data, so it is \code{NULL} (with a message) when \code{data}
+is not supplied. When \code{items} is given, the heatmap is subset to those
+items; \code{n_pairs} does not apply to it.}
+}
 }
 \description{
-Visualises the distribution of simulation-based Yen's Q3 residual
+Visualises the distribution of simulation-based Yen's \eqn{Q_3} residual
 correlations per item pair from \code{\link{RMlocdepQ3Cutoff}},
-optionally overlaying observed Q3 values computed from real data via
+optionally overlaying observed \eqn{Q_3} values computed from real data via
 \code{mirt::residuals(..., type = "Q3")}.
 }
 \details{
@@ -43,9 +52,10 @@ Uses \code{ggdist::stat_dotsinterval()} (when \code{data} is not supplied) or
 \code{ggdist::stat_dots()} (when \code{data} is supplied) with
 \code{point_interval = "median_hdci"} and \code{.width = c(0.66, 0.95, 0.99)}.
 
-The plot shows one row per item pair (labelled as "Item1 - Item2"). Only
-the upper triangle of the Q3 matrix is plotted (pairs are unordered
-under symmetric Q3, unlike partial gamma which is direction-dependent).
+The \verb{$pairs} plot shows one row per item pair (labelled as "Item1 - Item2").
+Only
+the upper triangle of the \eqn{Q_3} matrix is plotted (pairs are unordered
+under symmetric \eqn{Q_3}, unlike partial gamma which is direction-dependent).
 
 When \code{data} is \strong{not} supplied, the function plots the simulated Q3
 distributions as dot-interval plots using \code{ggdist::stat_dotsinterval()}
@@ -53,9 +63,10 @@ with median and Highest Density Continuous Interval (HDCI) summaries.
 
 When \code{data} \strong{is} supplied, the function:
 \enumerate{
-\item Fits a Rasch model to \code{data} via \code{mirt::mirt()} and extracts
-observed Q3 residual correlations.
-\item Overlays observed Q3 values as orange diamond markers on the
+\item Computes observed \eqn{Q_3} residual correlations under the same
+estimator used to build \code{simfit} (its \verb{$estimator}: CML/WLE by
+default, or MML via \code{mirt}).
+\item Overlays observed \eqn{Q_3} values as orange diamond markers on the
 simulated distributions.
 \item Shows per-pair cutoff intervals (from \code{simfit$pair_cutoffs})
 as black line segments, with thicker segments for the 66\\%

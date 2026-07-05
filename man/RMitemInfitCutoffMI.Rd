@@ -48,7 +48,7 @@ Default is \code{0.999} (99.9\% HDCI). Ignored when
 \value{
 A list with the same structure as \code{\link{RMitemInfitCutoff}}, so
 that the result can be passed directly to \code{\link{RMitemInfit}},
-\code{\link{RMitemInfitMI}}, and \code{\link{RMitemInfitCutoffPlot}}:
+\code{\link{RMitemInfitMI}}, and \code{\link{RMitemInfitPlot}}:
 \describe{
 \item{\code{results}}{data.frame with columns \code{iteration}, \code{imputation},
 \code{Item}, \code{InfitMSQ}, \code{OutfitMSQ} — the stacked simulation results from
@@ -94,15 +94,20 @@ The \code{mice} package must be installed (it is in Suggests, not Imports).
 }
 \examples{
 \donttest{
-if (requireNamespace("mice", quietly = TRUE)) {
-  # Create example data with missing values
+if (requireNamespace("mice", quietly = TRUE) &&
+    requireNamespace("iarm", quietly = TRUE) &&
+    requireNamespace("ggdist", quietly = TRUE)) {
+  # Create example data with ~10\% MCAR missingness
   set.seed(42)
-  sim_data <- as.data.frame(
-    matrix(sample(0:1, 200 * 8, replace = TRUE), nrow = 200, ncol = 8)
-  )
+  mat <- matrix(sample(0:1, 200 * 8, replace = TRUE), nrow = 200, ncol = 8)
+  mat[sample(length(mat), round(0.10 * length(mat)))] <- NA
+  sim_data <- as.data.frame(mat)
   colnames(sim_data) <- paste0("Item", 1:8)
-  # Introduce ~10\% MCAR missingness
-  sim_data[sample(length(sim_data), 0.10 * length(sim_data))] <- NA
+
+  # mice's ordinal method (`polr`) requires the items to be ordered
+  # factors, so code them as such before imputing. RMitemInfitCutoffMI()
+  # converts the completed factors back to numeric internally.
+  sim_data[] <- lapply(sim_data, function(x) factor(x, ordered = TRUE))
 
   # Impute (use more imputations, e.g. m = 5+, in real analyses)
   imp <- mice::mice(sim_data, m = 2, method = "polr", seed = 123,
@@ -121,5 +126,5 @@ if (requireNamespace("mice", quietly = TRUE)) {
 }
 \seealso{
 \code{\link{RMitemInfitCutoff}}, \code{\link{RMitemInfitMI}},
-\code{\link{RMitemInfitCutoffPlot}}
+\code{\link{RMitemInfitPlot}}
 }

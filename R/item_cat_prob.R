@@ -1,9 +1,9 @@
 #' Item Category Probability Curves
 #'
 #' Plots model-implied response-category probability curves for each item
-#' as a function of the latent trait \eqn{\theta}. Polytomous items are
-#' fitted with the Partial Credit Model via `eRm::PCM()`; dichotomous
-#' items are fitted with the Rasch model via `eRm::RM()`. Each item gets
+#' as a function of the latent trait \eqn{\theta}. Item parameters are
+#' estimated by conditional maximum likelihood via `psychotools::pcmodel()`
+#' (a dichotomous item is a 2-category PCM). Each item gets
 #' its own facet panel, with one curve per response category coloured
 #' from low to high using the viridis palette. Comparable in scope to
 #' `eRm::plotICC()` and `mirt`'s trace plots, with a `ggplot2` /
@@ -74,8 +74,8 @@
 #' @details
 #' For each polytomous item *i* with response categories
 #' \eqn{0, 1, \ldots, K_i} and threshold parameters
-#' \eqn{\delta_{i,1}, \ldots, \delta_{i,K_i}} from
-#' `eRm::thresholds()`, the PCM category probability is
+#' \eqn{\delta_{i,1}, \ldots, \delta_{i,K_i}} (CML, `psychotools`),
+#' the PCM category probability is
 #'
 #' \deqn{P(X_i = k \mid \theta) = \frac{\exp(\sum_{j=1}^{k}
 #'   (\theta - \delta_{i,j}))}{\sum_{k'=0}^{K_i} \exp(\sum_{j=1}^{k'}
@@ -140,24 +140,23 @@
 #' @importFrom rlang .data
 #' @export
 RMitemCatProb <- function(
-    data,
-    item_labels     = NULL,
-    category_labels = NULL,
-    theta_range     = NULL,
-    n_points        = 200L,
-    viridis_option  = "D",
-    viridis_end     = 0.95,
-    facet_ncol      = NULL,
-    label_wrap      = 25L,
-    line_width      = 0.9,
-    font            = "sans",
-    output          = c("ggplot", "dataframe"),
-    label_curves    = c("legend", "path"),
-    item            = NULL,
-    text_size       = 4
+  data,
+  item_labels = NULL,
+  category_labels = NULL,
+  theta_range = NULL,
+  n_points = 200L,
+  viridis_option = "D",
+  viridis_end = 0.95,
+  facet_ncol = NULL,
+  label_wrap = 25L,
+  line_width = 0.9,
+  font = "sans",
+  output = c("ggplot", "dataframe"),
+  label_curves = c("legend", "path"),
+  item = NULL,
+  text_size = 4
 ) {
-
-  output       <- match.arg(output)
+  output <- match.arg(output)
   label_curves <- match.arg(label_curves)
 
   # Resolve default theta_range based on label_curves: wider for path mode
@@ -167,15 +166,18 @@ RMitemCatProb <- function(
   }
 
   if (output == "ggplot" && !requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for output = \"ggplot\".",
-         call. = FALSE)
+    stop(
+      "Package 'ggplot2' is required for output = \"ggplot\".",
+      call. = FALSE
+    )
   }
   if (!requireNamespace("eRm", quietly = TRUE)) {
-    stop("Package 'eRm' is required for RMitemCatProb().",
-         call. = FALSE)
+    stop("Package 'eRm' is required for RMitemCatProb().", call. = FALSE)
   }
-  if (label_curves == "path" &&
-      !requireNamespace("geomtextpath", quietly = TRUE)) {
+  if (
+    label_curves == "path" &&
+      !requireNamespace("geomtextpath", quietly = TRUE)
+  ) {
     stop(
       "Package 'geomtextpath' is required when `label_curves = \"path\"`.\n",
       "Install it with: install.packages(\"geomtextpath\")",
@@ -192,40 +194,69 @@ RMitemCatProb <- function(
   # always have >= 2 items. Path mode uses the `item` argument to filter
   # which item's curves to plot AFTER the model is fit on all items.
   if (ncol(data) < 2L) {
-    stop("`data` must contain at least 2 columns (items). Found ",
-         ncol(data), " column(s).", call. = FALSE)
+    stop(
+      "`data` must contain at least 2 columns (items). Found ",
+      ncol(data),
+      " column(s).",
+      call. = FALSE
+    )
   }
 
-  if (!is.numeric(text_size) || length(text_size) != 1L ||
-      !is.finite(text_size) || text_size <= 0) {
+  if (
+    !is.numeric(text_size) ||
+      length(text_size) != 1L ||
+      !is.finite(text_size) ||
+      text_size <= 0
+  ) {
     stop("`text_size` must be a single positive number.", call. = FALSE)
   }
 
-  if (!is.numeric(theta_range) || length(theta_range) != 2L ||
-      theta_range[1L] >= theta_range[2L]) {
-    stop("`theta_range` must be a numeric vector of length 2 with ",
-         "theta_range[1] < theta_range[2].", call. = FALSE)
+  if (
+    !is.numeric(theta_range) ||
+      length(theta_range) != 2L ||
+      theta_range[1L] >= theta_range[2L]
+  ) {
+    stop(
+      "`theta_range` must be a numeric vector of length 2 with ",
+      "theta_range[1] < theta_range[2].",
+      call. = FALSE
+    )
   }
 
-  if (!is.numeric(n_points) || length(n_points) != 1L ||
-      n_points < 2L || n_points != as.integer(n_points)) {
+  if (
+    !is.numeric(n_points) ||
+      length(n_points) != 1L ||
+      n_points < 2L ||
+      n_points != as.integer(n_points)
+  ) {
     stop("`n_points` must be a single integer >= 2.", call. = FALSE)
   }
   n_points <- as.integer(n_points)
 
-  if (!is.numeric(viridis_end) || length(viridis_end) != 1L ||
-      viridis_end <= 0 || viridis_end > 1) {
-    stop("`viridis_end` must be a single number in (0, 1].",
-         call. = FALSE)
+  if (
+    !is.numeric(viridis_end) ||
+      length(viridis_end) != 1L ||
+      viridis_end <= 0 ||
+      viridis_end > 1
+  ) {
+    stop("`viridis_end` must be a single number in (0, 1].", call. = FALSE)
   }
 
   item_names <- colnames(data)
-  if (is.null(item_names)) item_names <- paste0("V", seq_len(ncol(data)))
+  if (is.null(item_names)) {
+    item_names <- paste0("V", seq_len(ncol(data)))
+  }
   n_items <- ncol(data)
 
   if (!is.null(item_labels) && length(item_labels) != n_items) {
-    stop("`item_labels` must have the same length as ncol(data) (",
-         n_items, "). Got ", length(item_labels), ".", call. = FALSE)
+    stop(
+      "`item_labels` must have the same length as ncol(data) (",
+      n_items,
+      "). Got ",
+      length(item_labels),
+      ".",
+      call. = FALSE
+    )
   }
 
   # Resolve `item` for path mode. Accept either a single item name or a
@@ -237,48 +268,81 @@ RMitemCatProb <- function(
         "`label_curves = \"path\"` requires an `item` argument (a single ",
         "item name or column index) identifying which item's category ",
         "curves to plot. Available items: ",
-        paste(item_names, collapse = ", "), ".",
+        paste(item_names, collapse = ", "),
+        ".",
         call. = FALSE
       )
     }
     if (length(item) != 1L) {
-      stop("`item` must identify exactly one item (length 1).",
-           call. = FALSE)
+      stop("`item` must identify exactly one item (length 1).", call. = FALSE)
     }
     if (is.numeric(item)) {
-      if (!is.finite(item) || item != as.integer(item) ||
-          item < 1L || item > n_items) {
-        stop("`item` index must be an integer in 1:", n_items, ".",
-             call. = FALSE)
+      if (
+        !is.finite(item) ||
+          item != as.integer(item) ||
+          item < 1L ||
+          item > n_items
+      ) {
+        stop(
+          "`item` index must be an integer in 1:",
+          n_items,
+          ".",
+          call. = FALSE
+        )
       }
       selected_item <- item_names[as.integer(item)]
     } else if (is.character(item)) {
       if (!(item %in% item_names)) {
-        stop("`item` \"", item, "\" not found in data. ",
-             "Available items: ", paste(item_names, collapse = ", "), ".",
-             call. = FALSE)
+        stop(
+          "`item` \"",
+          item,
+          "\" not found in data. ",
+          "Available items: ",
+          paste(item_names, collapse = ", "),
+          ".",
+          call. = FALSE
+        )
       }
       selected_item <- item
     } else {
-      stop("`item` must be a character item name or a numeric index.",
-           call. = FALSE)
+      stop(
+        "`item` must be a character item name or a numeric index.",
+        call. = FALSE
+      )
     }
   }
+
+  data <- as.data.frame(data)
+  n_total <- nrow(data)
+  has_na <- anyNA(data)
+  data <- .drop_empty_respondents(data)
+  n_used <- nrow(data)
 
   data_mat <- as.matrix(data)
   max_score <- max(data_mat, na.rm = TRUE)
   if (!is.finite(max_score) || max_score < 1L) {
-    stop("`data` must contain at least one item with maximum score >= 1.",
-         call. = FALSE)
+    stop(
+      "`data` must contain at least one item with maximum score >= 1.",
+      call. = FALSE
+    )
   }
   n_categories <- max_score + 1L
 
-  if (!is.null(category_labels) &&
-      length(category_labels) != n_categories) {
-    stop("`category_labels` must have the same length as the number of ",
-         "response categories (0 to ", max_score, " = ", n_categories,
-         " categories). Got ", length(category_labels), ".",
-         call. = FALSE)
+  if (
+    !is.null(category_labels) &&
+      length(category_labels) != n_categories
+  ) {
+    stop(
+      "`category_labels` must have the same length as the number of ",
+      "response categories (0 to ",
+      max_score,
+      " = ",
+      n_categories,
+      " categories). Got ",
+      length(category_labels),
+      ".",
+      call. = FALSE
+    )
   }
 
   # ---------------------------------------------------------------------
@@ -286,32 +350,12 @@ RMitemCatProb <- function(
   # ---------------------------------------------------------------------
   is_polytomous <- max_score > 1L
 
-  # Per-item thresholds: a list, one numeric vector per item.
-  if (is_polytomous) {
-    pcm_fit <- eRm::PCM(data)
-    thresh_obj <- eRm::thresholds(pcm_fit)
-    thresh_mat <- thresh_obj$threshtable[[1L]]
-    # Drop the "Location" column (always first); keep only the actual
-    # threshold columns (Threshold 1, Threshold 2, ...).
-    if ("Location" %in% colnames(thresh_mat)) {
-      thresh_mat <- thresh_mat[, -1L, drop = FALSE]
-    }
-    item_thresholds <- lapply(seq_len(nrow(thresh_mat)), function(i) {
-      v <- as.numeric(thresh_mat[i, ])
-      v[!is.na(v)]
-    })
-    names(item_thresholds) <- rownames(thresh_mat)
-  } else {
-    rm_fit <- eRm::RM(data)
-    # Item difficulty delta_i = -beta_i (eRm parametrises beta as
-    # easiness; we want difficulty for the threshold convention).
-    deltas <- as.numeric(-rm_fit$betapar)
-    item_thresholds <- lapply(deltas, function(d) d)
-    names(item_thresholds) <- item_names
-  }
-
-  # Make sure the order matches the input data column order
-  item_thresholds <- item_thresholds[item_names]
+  # Per-item thresholds (a list, one numeric vector per item) by CML via
+  # psychotools, on the grand-mean-zero scale used across the package. A
+  # dichotomous item is a 2-category PCM. The curve shapes are unchanged; for
+  # polytomous data the common scale can shift the absolute theta position
+  # relative to the earlier eRm parameterisation.
+  item_thresholds <- .fit_cml_thresholds(data)[item_names]
 
   # ---------------------------------------------------------------------
   # Compute category probability curves on the theta grid
@@ -332,14 +376,14 @@ RMitemCatProb <- function(
 
   # Build long-format probability data.frame
   per_item_dfs <- lapply(seq_along(item_thresholds), function(i) {
-    item   <- item_names[i]
-    thr    <- item_thresholds[[i]]
-    probs  <- pcm_probs(thr, theta)
-    K_i    <- length(thr)
+    item <- item_names[i]
+    thr <- item_thresholds[[i]]
+    probs <- pcm_probs(thr, theta)
+    K_i <- length(thr)
     out <- data.frame(
-      Item        = rep(item, times = length(theta) * (K_i + 1L)),
-      Category    = rep(0L:K_i, each = length(theta)),
-      Theta       = rep(theta, times = K_i + 1L),
+      Item = rep(item, times = length(theta) * (K_i + 1L)),
+      Category = rep(0L:K_i, each = length(theta)),
+      Theta = rep(theta, times = K_i + 1L),
       Probability = as.numeric(probs),
       stringsAsFactors = FALSE,
       row.names = NULL
@@ -356,16 +400,18 @@ RMitemCatProb <- function(
     item_names
   }
   facet_lookup <- stats::setNames(facet_labels, item_names)
-  plot_df$Item <- factor(facet_lookup[plot_df$Item],
-                         levels = facet_labels)
+  plot_df$Item <- factor(facet_lookup[plot_df$Item], levels = facet_labels)
 
   # In path mode, subset to the chosen item AFTER the model has been
   # fit on all items (so thresholds are CML-estimated against the full
   # multi-item dataset).
   if (label_curves == "path") {
     facet_label_selected <- facet_lookup[[selected_item]]
-    plot_df <- plot_df[as.character(plot_df$Item) == facet_label_selected,
-                       , drop = FALSE]
+    plot_df <- plot_df[
+      as.character(plot_df$Item) == facet_label_selected,
+      ,
+      drop = FALSE
+    ]
     rownames(plot_df) <- NULL
   }
 
@@ -397,65 +443,68 @@ RMitemCatProb <- function(
     ),
     ggplot2::scale_x_continuous(
       limits = theta_range,
-      breaks = seq(ceiling(theta_range[1L]),
-                   floor(theta_range[2L]), by = 1)
+      breaks = seq(ceiling(theta_range[1L]), floor(theta_range[2L]), by = 1)
     ),
     ggplot2::labs(
       x = expression(paste("Latent trait ", theta, " (logits)")),
-      y = "Category probability"
+      y = "Category probability",
+      caption = er2_caption(paste0(
+        .n_caption(
+          n_used,
+          n_total,
+          if (has_na) "incomplete responses retained" else character()
+        ),
+        "."
+      ))
     ),
     ggplot2::theme_bw(base_family = font),
     ggplot2::theme(
       panel.grid.minor = ggplot2::element_blank(),
-      strip.background = ggplot2::element_rect(fill = "grey95",
-                                               colour = NA),
-      strip.text       = ggplot2::element_text(face = "bold")
+      strip.background = ggplot2::element_rect(fill = "grey95", colour = NA),
+      strip.text = ggplot2::element_text(face = "bold")
     ),
     er2_axis_margins()
   )
 
   if (label_curves == "legend") {
-
     # -----------------------------------------------------------------
     # Mode 1: multi-item faceted plot with a separate colour legend
     # -----------------------------------------------------------------
     p <- ggplot2::ggplot(
       plot_df,
       ggplot2::aes(
-        x     = .data$Theta,
-        y     = .data$Probability,
+        x = .data$Theta,
+        y = .data$Probability,
         group = .data$Category,
         color = .data$Category
       )
     ) +
       ggplot2::geom_line(linewidth = line_width) +
       ggplot2::scale_color_viridis_c(
-        name    = "Response\ncategory",
-        breaks  = cat_breaks,
-        labels  = cat_labels,
-        limits  = c(0, max_score),
-        option  = viridis_option,
-        end     = viridis_end,
+        name = "Response\ncategory",
+        breaks = cat_breaks,
+        labels = cat_labels,
+        limits = c(0, max_score),
+        option = viridis_option,
+        end = viridis_end,
         # guide_legend gives one swatch per category (not a continuous bar),
         # so all `n_categories` labels are visible. ggplot's default places
         # the smallest break at the top of a vertical legend, which is the
         # natural reading order for ordinal "least -> most" categories
         # (e.g. PHQ-9: "Not at all" -> "Nearly every day").
-        guide   = ggplot2::guide_legend(
+        guide = ggplot2::guide_legend(
           override.aes = list(linewidth = 2)
         )
       ) +
       ggplot2::facet_wrap(
-        ~ Item,
-        ncol     = facet_ncol,
+        ~Item,
+        ncol = facet_ncol,
         labeller = ggplot2::labeller(
           Item = ggplot2::label_wrap_gen(label_wrap)
         )
       ) +
       base_scales
-
   } else {
-
     # -----------------------------------------------------------------
     # Mode 2: single-item plot with labels along each curve.
     #
@@ -482,8 +531,8 @@ RMitemCatProb <- function(
     p <- ggplot2::ggplot(
       plot_df,
       ggplot2::aes(
-        x     = .data$Theta,
-        y     = .data$Probability,
+        x = .data$Theta,
+        y = .data$Probability,
         group = .data$Category,
         color = .data$Category,
         label = .data$CategoryLabel
@@ -493,28 +542,29 @@ RMitemCatProb <- function(
         breaks = cat_breaks,
         limits = c(0, max_score),
         option = viridis_option,
-        end    = viridis_end,
-        guide  = "none"
+        end = viridis_end,
+        guide = "none"
       ) +
       ggplot2::ggtitle(as.character(plot_df$Item[1L])) +
       base_scales
 
-    edge_margin   <- 0.03 * diff(theta_range)
+    edge_margin <- 0.03 * diff(theta_range)
     hjust_lo_clip <- edge_margin / diff(theta_range)
     hjust_hi_clip <- 1 - hjust_lo_clip
 
     for (cat in sort(unique(plot_df$Category))) {
-      sub_cat     <- plot_df[plot_df$Category == cat, , drop = FALSE]
+      sub_cat <- plot_df[plot_df$Category == cat, , drop = FALSE]
       modal_theta <- sub_cat$Theta[which.max(sub_cat$Probability)]
-      hjust_val   <- (modal_theta - theta_range[1L]) / diff(theta_range)
-      hjust_val   <- max(hjust_lo_clip, min(hjust_hi_clip, hjust_val))
-      p <- p + geomtextpath::geom_textpath(
-        data      = sub_cat,
-        hjust     = hjust_val,
-        vjust     = -0.08,
-        linewidth = line_width,
-        size      = text_size
-      )
+      hjust_val <- (modal_theta - theta_range[1L]) / diff(theta_range)
+      hjust_val <- max(hjust_lo_clip, min(hjust_hi_clip, hjust_val))
+      p <- p +
+        geomtextpath::geom_textpath(
+          data = sub_cat,
+          hjust = hjust_val,
+          vjust = -0.08,
+          linewidth = line_width,
+          size = text_size
+        )
     }
   }
 

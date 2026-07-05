@@ -1,8 +1,8 @@
-#' Plot Distribution of Simulated Q3 Residual Correlations
+#' Plot Distribution of Simulated \eqn{Q_3} Residual Correlations
 #'
-#' Visualises the distribution of simulation-based Yen's Q3 residual
+#' Visualises the distribution of simulation-based Yen's \eqn{Q_3} residual
 #' correlations per item pair from \code{\link{RMlocdepQ3Cutoff}},
-#' optionally overlaying observed Q3 values computed from real data via
+#' optionally overlaying observed \eqn{Q_3} values computed from real data via
 #' \code{mirt::residuals(..., type = "Q3")}.
 #'
 #' Uses `ggdist::stat_dotsinterval()` (when `data` is not supplied) or
@@ -13,9 +13,9 @@
 #'   with components `pair_results`, `pair_cutoffs`, `actual_iterations`,
 #'   `sample_n`, and `item_names`).
 #' @param data Optional. A data.frame or matrix of item responses for
-#'   computing and overlaying observed Q3 values. Items must be scored
+#'   computing and overlaying observed \eqn{Q_3} values. Items must be scored
 #'   starting at 0 (non-negative integers). When provided, the plot
-#'   includes orange diamond markers for the observed Q3 alongside the
+#'   includes orange diamond markers for the observed \eqn{Q_3} alongside the
 #'   simulated distribution, plus segment summaries from the cutoff
 #'   intervals.
 #' @param items Optional character vector of item names to include in the
@@ -29,12 +29,22 @@
 #'   `items` filter when both are supplied. Values larger than the number
 #'   of available pairs are silently capped.
 #'
-#' @return A `ggplot` object.
+#' @return A named list of two `ggplot` objects (mirroring the `$matrix` /
+#'   `$pairs` structure of \code{\link{RMlocdepQ3}}'s table output):
+#'   \describe{
+#'     \item{`$pairs`}{the per-pair plot described below (always returned).}
+#'     \item{`$matrix`}{a lower-triangle tile heatmap of the **observed** \eqn{Q_3}
+#'       matrix, with pairs above the global dynamic cut-off outlined. This
+#'       needs the observed data, so it is `NULL` (with a message) when `data`
+#'       is not supplied. When `items` is given, the heatmap is subset to those
+#'       items; `n_pairs` does not apply to it.}
+#'   }
 #'
 #' @details
-#' The plot shows one row per item pair (labelled as "Item1 - Item2"). Only
-#' the upper triangle of the Q3 matrix is plotted (pairs are unordered
-#' under symmetric Q3, unlike partial gamma which is direction-dependent).
+#' The `$pairs` plot shows one row per item pair (labelled as "Item1 - Item2").
+#' Only
+#' the upper triangle of the \eqn{Q_3} matrix is plotted (pairs are unordered
+#' under symmetric \eqn{Q_3}, unlike partial gamma which is direction-dependent).
 #'
 #' When `data` is **not** supplied, the function plots the simulated Q3
 #' distributions as dot-interval plots using `ggdist::stat_dotsinterval()`
@@ -42,9 +52,10 @@
 #'
 #' When `data` **is** supplied, the function:
 #' \enumerate{
-#'   \item Fits a Rasch model to `data` via `mirt::mirt()` and extracts
-#'     observed Q3 residual correlations.
-#'   \item Overlays observed Q3 values as orange diamond markers on the
+#'   \item Computes observed \eqn{Q_3} residual correlations under the same
+#'     estimator used to build `simfit` (its `$estimator`: CML/WLE by
+#'     default, or MML via `mirt`).
+#'   \item Overlays observed \eqn{Q_3} values as orange diamond markers on the
 #'     simulated distributions.
 #'   \item Shows per-pair cutoff intervals (from `simfit$pair_cutoffs`)
 #'     as black line segments, with thicker segments for the 66\%
@@ -85,7 +96,6 @@
 #' }
 #' }
 RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
-
   # --- Check required packages ------------------------------------------------
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop("Package 'ggplot2' is required for RMlocdepQ3Plot().", call. = FALSE)
@@ -98,8 +108,13 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
   }
 
   # --- Validate simfit --------------------------------------------------------
-  required_names <- c("pair_results", "pair_cutoffs", "actual_iterations",
-                      "sample_n", "item_names")
+  required_names <- c(
+    "pair_results",
+    "pair_cutoffs",
+    "actual_iterations",
+    "sample_n",
+    "item_names"
+  )
   missing_names <- setdiff(required_names, names(simfit))
   if (length(missing_names) > 0L) {
     stop(
@@ -112,11 +127,26 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
     )
   }
 
-  results_df        <- simfit$pair_results
-  pair_cutoffs      <- simfit$pair_cutoffs
+  results_df <- simfit$pair_results
+  pair_cutoffs <- simfit$pair_cutoffs
   actual_iterations <- simfit$actual_iterations
-  sample_n          <- simfit$sample_n
-  item_names        <- simfit$item_names
+  sample_n <- simfit$sample_n
+  item_names <- simfit$item_names
+  # Match the estimator used to build the cut-off (older objects predate it).
+  estimator <- if (is.null(simfit$estimator)) "CML" else simfit$estimator
+
+  # Standard sample-size clause. The Q3 cutoff retains incomplete responses
+  # (matching RMlocdepQ3); `sample_n_total` / `sample_has_na` are absent in
+  # cutoff objects made by older versions, so fall back to the plain count.
+  sample_clause <- .n_caption(
+    sample_n,
+    if (is.null(simfit$sample_n_total)) sample_n else simfit$sample_n_total,
+    if (isTRUE(simfit$sample_has_na)) {
+      "incomplete responses retained"
+    } else {
+      character()
+    }
+  )
 
   # --- Validate items parameter -----------------------------------------------
   if (!is.null(items)) {
@@ -125,29 +155,38 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
       stop(
         "Unknown item(s) in `items`: ",
         paste(unknown_items, collapse = ", "),
-        ".\nAvailable items: ", paste(item_names, collapse = ", "),
+        ".\nAvailable items: ",
+        paste(item_names, collapse = ", "),
         call. = FALSE
       )
     }
     if (length(items) < 2L) {
-      stop("`items` must contain at least 2 item names to form a pair.",
-           call. = FALSE)
+      stop(
+        "`items` must contain at least 2 item names to form a pair.",
+        call. = FALSE
+      )
     }
   }
 
   # --- Validate n_pairs parameter ---------------------------------------------
   if (!is.null(n_pairs)) {
-    if (!is.numeric(n_pairs) || length(n_pairs) != 1L ||
-        !is.finite(n_pairs) || n_pairs < 1 ||
-        n_pairs != as.integer(n_pairs)) {
-      stop("`n_pairs` must be a single positive integer or NULL.",
-           call. = FALSE)
+    if (
+      !is.numeric(n_pairs) ||
+        length(n_pairs) != 1L ||
+        !is.finite(n_pairs) ||
+        n_pairs < 1 ||
+        n_pairs != as.integer(n_pairs)
+    ) {
+      stop(
+        "`n_pairs` must be a single positive integer or NULL.",
+        call. = FALSE
+      )
     }
     n_pairs <- as.integer(n_pairs)
   }
 
   # --- Create pair labels -----------------------------------------------------
-  results_df$Pair   <- paste(results_df$Item1, "-", results_df$Item2)
+  results_df$Pair <- paste(results_df$Item1, "-", results_df$Item2)
   pair_cutoffs$Pair <- paste(pair_cutoffs$Item1, "-", pair_cutoffs$Item2)
 
   # --- Filter to selected items -----------------------------------------------
@@ -165,31 +204,26 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
   # --- Compute observed Q3 (when data supplied) -------------------------------
   observed_df <- NULL
   if (!missing(data)) {
-    if (!requireNamespace("mirt", quietly = TRUE)) {
+    if (estimator == "MML" && !requireNamespace("mirt", quietly = TRUE)) {
       stop(
-        "Package 'mirt' is required to compute observed Q3 but is not ",
-        "installed.\nInstall it with: install.packages(\"mirt\")",
+        "Package 'mirt' is required to compute observed Q3 with ",
+        "estimator = \"MML\" but is not installed.\n",
+        "Install it with: install.packages(\"mirt\")",
         call. = FALSE
       )
     }
     validate_response_data(data)
 
-    mirt_fit <- mirt::mirt(
-      data,
-      model      = 1L,
-      itemtype   = "Rasch",
-      verbose    = FALSE,
-      accelerate = "squarem"
-    )
-    q3_mat <- mirt::residuals(mirt_fit, type = "Q3", digits = 4,
-                              verbose = FALSE)
-    diag(q3_mat) <- NA
+    # Same estimator as the simulated cut-off (stored in simfit$estimator).
+    q3_mat <- .q3_residual_matrix(data, estimator = estimator)
     item_names_q3 <- colnames(q3_mat)
-    if (is.null(item_names_q3)) item_names_q3 <- item_names
+    if (is.null(item_names_q3)) {
+      item_names_q3 <- item_names
+    }
     upper_idx <- which(upper.tri(q3_mat), arr.ind = TRUE)
     observed_df <- data.frame(
-      Item1       = item_names_q3[upper_idx[, "row"]],
-      Item2       = item_names_q3[upper_idx[, "col"]],
+      Item1 = item_names_q3[upper_idx[, "row"]],
+      Item2 = item_names_q3[upper_idx[, "col"]],
       observed_Q3 = q3_mat[upper_idx],
       stringsAsFactors = FALSE
     )
@@ -205,29 +239,39 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
   if (!is.null(n_pairs)) {
     # Per-pair simulated median (used by either ranking metric below)
     pair_names_all <- unique(results_df$Pair)
-    med_sim <- vapply(pair_names_all, function(pp) {
-      stats::median(results_df$Q3[results_df$Pair == pp], na.rm = TRUE)
-    }, numeric(1L))
+    med_sim <- vapply(
+      pair_names_all,
+      function(pp) {
+        stats::median(results_df$Q3[results_df$Pair == pp], na.rm = TRUE)
+      },
+      numeric(1L)
+    )
     names(med_sim) <- pair_names_all
 
     if (!is.null(observed_df)) {
       # Rank by |observed Q3 − median(simulated Q3 per pair)|
       obs_lookup <- stats::setNames(observed_df$observed_Q3, observed_df$Pair)
-      deviation  <- abs(obs_lookup[pair_names_all] - med_sim[pair_names_all])
+      deviation <- abs(obs_lookup[pair_names_all] - med_sim[pair_names_all])
     } else {
       # Rank by |median simulated Q3 per pair|
       deviation <- abs(med_sim[pair_names_all])
     }
     ord <- order(deviation, decreasing = TRUE)
-    keep_n     <- min(n_pairs, length(pair_names_all))
+    keep_n <- min(n_pairs, length(pair_names_all))
     keep_pairs <- pair_names_all[ord[seq_len(keep_n)]]
 
-    results_df   <- results_df[results_df$Pair %in% keep_pairs, , drop = FALSE]
-    pair_cutoffs <- pair_cutoffs[pair_cutoffs$Pair %in% keep_pairs, ,
-                                 drop = FALSE]
+    results_df <- results_df[results_df$Pair %in% keep_pairs, , drop = FALSE]
+    pair_cutoffs <- pair_cutoffs[
+      pair_cutoffs$Pair %in% keep_pairs,
+      ,
+      drop = FALSE
+    ]
     if (!is.null(observed_df)) {
-      observed_df <- observed_df[observed_df$Pair %in% keep_pairs, ,
-                                 drop = FALSE]
+      observed_df <- observed_df[
+        observed_df$Pair %in% keep_pairs,
+        ,
+        drop = FALSE
+      ]
     }
     # Y-axis order: largest deviation at the top
     pair_levels <- rev(keep_pairs)
@@ -237,26 +281,28 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
 
   # --- Per-pair summary intervals for segment overlays ------------------------
   pair_names <- unique(results_df$Pair)
-  lo_hi <- do.call(rbind, lapply(pair_names, function(pair) {
-    sub <- results_df[results_df$Pair == pair, ]
-    data.frame(
-      Pair         = pair,
-      min_Q3       = stats::quantile(sub$Q3, 0.005, na.rm = TRUE),
-      max_Q3       = stats::quantile(sub$Q3, 0.995, na.rm = TRUE),
-      p66lo_Q3     = stats::quantile(sub$Q3, 0.167, na.rm = TRUE),
-      p66hi_Q3     = stats::quantile(sub$Q3, 0.833, na.rm = TRUE),
-      median_Q3    = stats::median(sub$Q3, na.rm = TRUE),
-      stringsAsFactors = FALSE,
-      row.names    = NULL
-    )
-  }))
+  lo_hi <- do.call(
+    rbind,
+    lapply(pair_names, function(pair) {
+      sub <- results_df[results_df$Pair == pair, ]
+      data.frame(
+        Pair = pair,
+        min_Q3 = stats::quantile(sub$Q3, 0.005, na.rm = TRUE),
+        max_Q3 = stats::quantile(sub$Q3, 0.995, na.rm = TRUE),
+        p66lo_Q3 = stats::quantile(sub$Q3, 0.167, na.rm = TRUE),
+        p66hi_Q3 = stats::quantile(sub$Q3, 0.833, na.rm = TRUE),
+        median_Q3 = stats::median(sub$Q3, na.rm = TRUE),
+        stringsAsFactors = FALSE,
+        row.names = NULL
+      )
+    })
+  )
   rownames(lo_hi) <- NULL
 
   # --- Case 1: no observed data, show simulation distribution only ------------
   if (missing(data)) {
-
     results_plot <- data.frame(
-      Pair  = results_df$Pair,
+      Pair = results_df$Pair,
       Value = results_df$Q3,
       stringsAsFactors = FALSE
     )
@@ -268,55 +314,70 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
     ) +
       ggdist::stat_dotsinterval(
         ggplot2::aes(slab_fill = ggplot2::after_stat(.data$level)),
-        quantiles      = actual_iterations,
+        quantiles = actual_iterations,
         point_interval = "median_hdci",
-        layout         = "weave",
-        slab_color     = NA,
-        .width         = c(0.66, 0.95, 0.99)
+        layout = "weave",
+        slab_color = NA,
+        .width = c(0.66, 0.95, 0.99)
       ) +
       ggplot2::geom_vline(
         xintercept = 0,
-        linetype   = "dashed",
-        color      = "grey50",
-        linewidth  = 0.4
+        linetype = "dashed",
+        color = "grey50",
+        linewidth = 0.4
       ) +
       ggplot2::labs(
-        x       = "Q3 residual correlation",
-        y       = "Item pair",
+        x = "Q3 residual correlation",
+        y = "Item pair",
         caption = er2_caption(paste0(
-          "Results from ", actual_iterations,
-          " simulated datasets with ", sample_n,
-          " respondents (no true local dependence)."
+          "Results from ",
+          actual_iterations,
+          " simulated datasets (no true local dependence). ",
+          sample_clause,
+          " per dataset."
         ))
       ) +
       ggplot2::scale_color_manual(
-        values     = scales::brewer_pal()(3),
+        values = scales::brewer_pal()(3),
         aesthetics = "slab_fill",
-        guide      = "none"
+        guide = "none"
       ) +
       ggplot2::theme_minimal() +
       ggplot2::theme(panel.spacing = ggplot2::unit(0.7, "cm")) +
       er2_axis_margins() +
       er2_plot_caption()
 
-    return(p)
+    # The $matrix tile heatmap needs the observed Q3 matrix, which requires
+    # `data`; without it only the per-pair distribution ($pairs) is available.
+    message(
+      "The Q3 tile heatmap ($matrix) requires `data`; ",
+      "returning $matrix = NULL."
+    )
+    return(list(matrix = NULL, pairs = p))
   }
 
   # --- Case 2: observed data supplied -----------------------------------------
   Q3_sim <- data.frame(
-    Pair  = results_df$Pair,
+    Pair = results_df$Pair,
     Value = results_df$Q3,
     stringsAsFactors = FALSE
   )
-  Q3_sim <- merge(Q3_sim, observed_df[, c("Pair", "observed_Q3")],
-                  by = "Pair", sort = FALSE)
+  Q3_sim <- merge(
+    Q3_sim,
+    observed_df[, c("Pair", "observed_Q3")],
+    by = "Pair",
+    sort = FALSE
+  )
   Q3_sim$Pair <- factor(Q3_sim$Pair, levels = pair_levels)
 
   lo_hi$Pair_f <- factor(lo_hi$Pair, levels = pair_levels)
 
   caption_text <- er2_caption(paste0(
-    "Results from ", actual_iterations,
-    " simulated datasets with ", sample_n, " respondents.\n",
+    "Results from ",
+    actual_iterations,
+    " simulated datasets. ",
+    sample_clause,
+    " per dataset.\n",
     "Orange diamonds indicate observed Q3 residual correlation. ",
     "Black dots indicate median Q3 from simulations."
   ))
@@ -327,31 +388,31 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
   ) +
     ggdist::stat_dots(
       ggplot2::aes(slab_fill = ggplot2::after_stat(.data$level)),
-      quantiles  = actual_iterations,
-      layout     = "weave",
+      quantiles = actual_iterations,
+      layout = "weave",
       slab_color = NA,
-      .width     = c(0.66, 0.95, 0.99)
+      .width = c(0.66, 0.95, 0.99)
     ) +
     ggplot2::geom_segment(
       data = lo_hi,
       ggplot2::aes(
-        x    = .data$min_Q3,
+        x = .data$min_Q3,
         xend = .data$max_Q3,
-        y    = .data$Pair_f,
+        y = .data$Pair_f,
         yend = .data$Pair_f
       ),
-      color     = "black",
+      color = "black",
       linewidth = 0.7
     ) +
     ggplot2::geom_segment(
       data = lo_hi,
       ggplot2::aes(
-        x    = .data$p66lo_Q3,
+        x = .data$p66lo_Q3,
         xend = .data$p66hi_Q3,
-        y    = .data$Pair_f,
+        y = .data$Pair_f,
         yend = .data$Pair_f
       ),
-      color     = "black",
+      color = "black",
       linewidth = 1.2
     ) +
     ggplot2::geom_point(
@@ -364,31 +425,49 @@ RMlocdepQ3Plot <- function(simfit, data, items = NULL, n_pairs = NULL) {
     ) +
     ggplot2::geom_point(
       ggplot2::aes(x = .data$observed_Q3),
-      color    = "sienna2",
-      shape    = 18,
+      color = "sienna2",
+      shape = 18,
       position = ggplot2::position_nudge(y = -0.1),
-      size     = 4
+      size = 4
     ) +
     ggplot2::geom_vline(
       xintercept = 0,
-      linetype   = "dashed",
-      color      = "grey50",
-      linewidth  = 0.4
+      linetype = "dashed",
+      color = "grey50",
+      linewidth = 0.4
     ) +
     ggplot2::labs(
-      x       = "Q3 residual correlation",
-      y       = "Item pair",
+      x = "Q3 residual correlation",
+      y = "Item pair",
       caption = caption_text
     ) +
     ggplot2::scale_color_manual(
-      values     = scales::brewer_pal()(3),
+      values = scales::brewer_pal()(3),
       aesthetics = "slab_fill",
-      guide      = "none"
+      guide = "none"
     ) +
     ggplot2::theme_minimal() +
     ggplot2::theme(panel.spacing = ggplot2::unit(0.7, "cm")) +
     er2_axis_margins() +
     er2_plot_caption()
 
-  p
+  # --- $matrix: tile heatmap of the observed Q3 matrix ------------------------
+  # Same heatmap earlier versions returned from RMlocdepQ3()$plot, now here so
+  # the table and plot outputs share the $matrix / $pairs structure. The global
+  # dynamic cut-off mirrors RMlocdepQ3(): mean off-diagonal Q3 + suggested
+  # cut-off. The `items` filter subsets the matrix; `n_pairs` does not apply.
+  q3_tile <- if (is.null(items)) q3_mat else q3_mat[items, items, drop = FALSE]
+  dyn_cutoff <- if (!is.null(simfit$suggested_cutoff)) {
+    mean(q3_tile, na.rm = TRUE) + as.numeric(simfit$suggested_cutoff)
+  } else {
+    NULL
+  }
+  matrix_plot <- .q3_tile_plot(
+    q3_tile,
+    dyn_cutoff = dyn_cutoff,
+    estimator = estimator,
+    actual_iterations = actual_iterations
+  )
+
+  list(matrix = matrix_plot, pairs = p)
 }

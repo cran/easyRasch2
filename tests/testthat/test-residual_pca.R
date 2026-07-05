@@ -57,7 +57,15 @@ test_that("RMdimResidualPCA output = 'kable' returns knitr_kable", {
   expect_s3_class(out, "knitr_kable")
 })
 
-test_that("RMdimResidualPCA output = 'loadings' returns a ggplot", {
+test_that("RMdimResidualPCA output = 'ggplot' returns a ggplot", {
+  skip_if_not_installed("eRm")
+  skip_if_not_installed("ggplot2")
+  df <- make_dichotomous()
+  p  <- RMdimResidualPCA(df, output = "ggplot")
+  expect_s3_class(p, "ggplot")
+})
+
+test_that("RMdimResidualPCA output = 'loadings' is a backward-compatible alias for 'ggplot'", {
   skip_if_not_installed("eRm")
   skip_if_not_installed("ggplot2")
   df <- make_dichotomous()
@@ -92,6 +100,7 @@ test_that("RMdimResidualPCA n_components controls number of rows", {
 # RMdimResidualPCACutoff -- small iterations to keep tests fast
 # ---------------------------------------------------------------------
 test_that("RMdimResidualPCACutoff returns a list with simulated eigenvalues + percentile cutoffs", {
+  skip_on_cran()
   skip_if_not_installed("eRm")
   df  <- make_dichotomous()
   res <- RMdimResidualPCACutoff(df, iterations = 10L, parallel = FALSE, seed = 1L)
@@ -106,6 +115,7 @@ test_that("RMdimResidualPCACutoff returns a list with simulated eigenvalues + pe
 })
 
 test_that("RMdimResidualPCA accepts an RMdimResidualPCACutoff result for cutoff arg", {
+  skip_on_cran()
   skip_if_not_installed("eRm")
   df <- make_dichotomous()
   bound <- RMdimResidualPCACutoff(df, iterations = 5L, parallel = FALSE, seed = 1L)
@@ -113,10 +123,51 @@ test_that("RMdimResidualPCA accepts an RMdimResidualPCACutoff result for cutoff 
   expect_true("Flagged" %in% names(res))
 })
 
+test_that("RMdimResidualPCA p_value requires the full cutoff object", {
+  skip_if_not_installed("eRm")
+  df <- make_dichotomous()
+  expect_error(
+    RMdimResidualPCA(df, cutoff = 1.8, p_value = TRUE),
+    regexp = "full RMdimResidualPCACutoff"
+  )
+  expect_error(
+    RMdimResidualPCA(df, p_value = TRUE),
+    regexp = "full RMdimResidualPCACutoff"
+  )
+})
+
+test_that("RMdimResidualPCA p_value adds a one-sided p for PC1 only", {
+  skip_on_cran()
+  skip_if_not_installed("eRm")
+  df <- make_dichotomous()
+  bound <- RMdimResidualPCACutoff(df, iterations = 10L, parallel = FALSE,
+                                  seed = 1L)
+  res <- RMdimResidualPCA(df, cutoff = bound, p_value = TRUE,
+                          output = "dataframe")
+  expect_true("p" %in% names(res))
+  # p is rounded to 4 dp in the table, so compare against the rounded floor
+  B <- bound$actual_iterations
+  expect_gte(res$p[1L], round(1 / (B + 1), 4))
+  expect_lte(res$p[1L], 1)
+  expect_true(all(is.na(res$p[-1L])))
+  # kable output carries the extra column without erroring
+  kbl <- RMdimResidualPCA(df, cutoff = bound, p_value = TRUE)
+  expect_s3_class(kbl, "knitr_kable")
+})
+
 test_that("RMdimResidualPCACutoff is reproducible with the same seed", {
+  skip_on_cran()
   skip_if_not_installed("eRm")
   df <- make_dichotomous()
   r1 <- RMdimResidualPCACutoff(df, iterations = 5L, parallel = FALSE, seed = 42L)
   r2 <- RMdimResidualPCACutoff(df, iterations = 5L, parallel = FALSE, seed = 42L)
   expect_equal(r1$results, r2$results)
+})
+
+test_that("RMdimResidualPCA warns on sparse/zero-variance items (CML)", {
+  skip_if_not_installed("eRm")
+  df <- make_dichotomous()
+  df[[1]] <- 0L   # constant item -> destabilises CML; should warn, not fail silently
+  expect_warning(try(RMdimResidualPCA(df, output = "dataframe"), silent = TRUE),
+                 regexp = "[Ss]parse|zero-variance")
 })

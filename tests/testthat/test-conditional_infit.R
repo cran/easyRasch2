@@ -9,16 +9,19 @@ test_that("RMitemInfit errors when iarm is not installed", {
 })
 
 test_that("RMitemInfit errors when data does not start at 0", {
+  skip_if_not_installed("iarm")
   df <- as.data.frame(matrix(sample(1:3, 200, replace = TRUE), nrow = 40, ncol = 5))
   expect_error(RMitemInfit(df), regexp = "scored starting at 0")
 })
 
 test_that("RMitemInfit errors when data is all NA", {
+  skip_if_not_installed("iarm")
   df <- as.data.frame(matrix(NA_integer_, nrow = 10, ncol = 4))
   expect_error(RMitemInfit(df), regexp = "No complete|no non-missing")
 })
 
 test_that("RMitemInfit errors when data is not a data.frame or matrix", {
+  skip_if_not_installed("iarm")
   expect_error(RMitemInfit(list(a = 1:5)), regexp = "data.frame or matrix")
 })
 
@@ -57,12 +60,13 @@ test_that("RMitemInfit output = 'kable' returns knitr_kable with complete-cases 
     matrix(sample(0:1, 200, replace = TRUE), nrow = 40, ncol = 5)
   )
   colnames(df) <- paste0("Item", 1:5)
+  df[1, 1] <- NA # one incomplete row so the caption shows the drop + label
 
   result <- RMitemInfit(df, output = "kable")
   expect_s3_class(result, "knitr_kable")
   cap <- attr(result, "caption")
   if (is.null(cap)) cap <- paste(as.character(result), collapse = "\n")
-  expect_true(grepl("complete cases", cap))
+  expect_true(grepl("of 40 respondents \\(complete cases\\)", cap))
 })
 
 test_that("RMitemInfit sort = 'infit' sorts by Infit_MSQ descending", {
@@ -126,7 +130,8 @@ test_that("RMitemInfit with mock cutoff data.frame adds expected columns", {
     names(result),
     c("Item", "Infit_MSQ", "Infit_low", "Infit_high", "Flagged", "Relative_location")
   )
-  expect_type(result$Flagged, "logical")
+  expect_type(result$Flagged, "character")
+  expect_true(all(result$Flagged %in% c("overfit", "underfit", "")))
   expect_true(all(result$Infit_low  == 0.7))
   expect_true(all(result$Infit_high == 1.3))
 })
@@ -242,8 +247,9 @@ test_that("RMitemInfitCutoff errors when cutoff_method = 'hdci' but ggdist is no
 })
 
 test_that("RMitemInfitCutoff cutoff_method = 'quantile' returns valid cutoffs", {
+  skip_on_cran()
+  # RMitemInfitCutoff() fits via psychotools (Imports) + iarm; no eRm needed.
   skip_if_not_installed("iarm")
-  skip_if_not_installed("eRm")
   set.seed(42)
   df <- as.data.frame(
     matrix(sample(0:1, 1000, replace = TRUE), nrow = 200, ncol = 5)
@@ -263,8 +269,8 @@ test_that("RMitemInfitCutoff cutoff_method = 'quantile' returns valid cutoffs", 
 })
 
 test_that("RMitemInfitCutoff cutoff_method = 'hdci' returns valid cutoffs", {
+  skip_on_cran()
   skip_if_not_installed("iarm")
-  skip_if_not_installed("eRm")
   skip_if_not_installed("ggdist")
   set.seed(42)
   df <- as.data.frame(
@@ -281,6 +287,30 @@ test_that("RMitemInfitCutoff cutoff_method = 'hdci' returns valid cutoffs", {
   expect_equal(nrow(res$item_cutoffs), 5L)
   expect_true(all(res$item_cutoffs$infit_low < res$item_cutoffs$infit_high))
   expect_true(all(res$item_cutoffs$outfit_low < res$item_cutoffs$outfit_high))
+})
+
+test_that("RMitemInfitCutoff dgp = 'conditional' runs; default is 'resample'", {
+  skip_on_cran()
+  skip_if_not_installed("iarm")
+  set.seed(6)
+  df <- as.data.frame(matrix(sample(0:1, 200 * 6, replace = TRUE), 200, 6))
+  colnames(df) <- paste0("I", 1:6)
+
+  cu <- RMitemInfitCutoff(df, iterations = 20, parallel = FALSE, seed = 1,
+                          dgp = "conditional")
+  expect_identical(cu$dgp, "conditional")
+  expect_s3_class(cu$item_cutoffs, "data.frame")
+  expect_equal(nrow(cu$item_cutoffs), 6L)
+  expect_true(all(cu$item_cutoffs$infit_low < cu$item_cutoffs$infit_high))
+
+  # default DGP is unchanged
+  cu_def <- RMitemInfitCutoff(df, iterations = 5, parallel = FALSE, seed = 1)
+  expect_identical(cu_def$dgp, "resample")
+
+  # the conditional object flows through RMitemInfit()
+  skip_if_not_installed("eRm")
+  res <- RMitemInfit(df, cutoff = cu, output = "dataframe")
+  expect_true(is.data.frame(res))
 })
 
 test_that("RMitemInfit with cutoff data.frame (no actual_iterations) uses generic caption", {
@@ -329,6 +359,7 @@ test_that("RMitemInfit errors when cutoff item names do not match data", {
 })
 
 test_that("RMitemInfit errors when cutoff data.frame has missing required columns", {
+  skip_if_not_installed("iarm")
   set.seed(42)
   df <- as.data.frame(
     matrix(sample(0:1, 200, replace = TRUE), nrow = 40, ncol = 5)
@@ -368,7 +399,8 @@ test_that("RMitemInfit Flagged column correctly identifies values outside cutoff
     stringsAsFactors = FALSE
   )
   tight_result <- RMitemInfit(df, cutoff = tight_cutoff, output = "dataframe")
-  expect_true(all(tight_result$Flagged))
+  # each MSQ is below its (MSQ + 0.1) lower bound -> all flagged "overfit"
+  expect_true(all(tight_result$Flagged == "overfit"))
 
   # Loose cutoff: no items should be flagged (window encompasses all values)
   loose_cutoff <- data.frame(
@@ -378,5 +410,5 @@ test_that("RMitemInfit Flagged column correctly identifies values outside cutoff
     stringsAsFactors = FALSE
   )
   loose_result <- RMitemInfit(df, cutoff = loose_cutoff, output = "dataframe")
-  expect_false(any(loose_result$Flagged))
+  expect_true(all(loose_result$Flagged == ""))
 })

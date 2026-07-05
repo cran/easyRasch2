@@ -55,6 +55,10 @@ the conventional direction.}
 specified by \code{cutoff_method}.}
 \item{\code{actual_iterations}}{Number of successful iterations.}
 \item{\code{sample_n}}{Number of complete cases used.}
+\item{\code{sample_n_total}}{Number of respondents in the raw input data,
+before the complete-case filter.}
+\item{\code{sample_has_na}}{Logical. Whether the raw input data contained
+any missing values.}
 \item{\code{sample_summary}}{Summary statistics of estimated person
 parameters.}
 \item{\code{item_names}}{Character vector of item names from data.}
@@ -75,8 +79,8 @@ critical values.
 \details{
 For each simulation iteration the function:
 \enumerate{
-\item Resamples person parameters (thetas) with replacement from ML
-estimates.
+\item Resamples person parameters (thetas) with replacement from the
+WLE person locations.
 \item Simulates item response data under a Rasch model (dichotomous via
 \code{psychotools::rrm()} or polytomous via an internal partial credit
 simulator).
@@ -91,9 +95,11 @@ from real data that fall outside these bounds suggest local dependence that
 exceeds what would be expected by chance. Failed iterations (e.g., due to
 convergence issues or degenerate data) are silently discarded.
 
-Supports both \strong{dichotomous} data (via \code{eRm::RM()} and
-\code{psychotools::rrm()}) and \strong{polytomous} data (via \code{eRm::PCM()} and an
-internal partial credit score simulator).
+The generating model uses CML item thresholds via \code{psychotools::pcmodel()}
+(a dichotomous item is a 2-category PCM) and WLE person locations,
+consistent with the rest of the package; responses are simulated with
+\code{psychotools::rrm()} (dichotomous) or an internal partial credit score
+simulator (polytomous).
 
 Parallel processing is provided by the \code{mirai} package (optional). Install
 it with \code{install.packages("mirai")} to enable parallelisation.
@@ -102,16 +108,19 @@ The \code{iarm} package must be installed (it is in Suggests, not Imports).
 }
 \examples{
 \donttest{
-set.seed(42)
-sim_data <- as.data.frame(
-  matrix(sample(0:1, 200 * 10, replace = TRUE), nrow = 200, ncol = 10)
-)
-colnames(sim_data) <- paste0("Item", 1:10)
+if (requireNamespace("iarm", quietly = TRUE) &&
+    requireNamespace("ggdist", quietly = TRUE)) {
+  set.seed(42)
+  sim_data <- as.data.frame(
+    matrix(sample(0:1, 200 * 10, replace = TRUE), nrow = 200, ncol = 10)
+  )
+  colnames(sim_data) <- paste0("Item", 1:10)
 
-# Run 100 iterations sequentially for a quick demo
-cutoff_res <- RMlocdepGammaCutoff(sim_data, iterations = 100, parallel = FALSE,
-                           seed = 42)
-cutoff_res$pair_cutoffs
+  # Run 100 iterations sequentially for a quick demo
+  cutoff_res <- RMlocdepGammaCutoff(sim_data, iterations = 100,
+                                    parallel = FALSE, seed = 42)
+  cutoff_res$pair_cutoffs
+}
 }
 }
 \references{

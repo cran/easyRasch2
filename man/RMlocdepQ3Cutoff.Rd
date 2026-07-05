@@ -2,7 +2,7 @@
 % Please edit documentation in R/local_dependence.R
 \name{RMlocdepQ3Cutoff}
 \alias{RMlocdepQ3Cutoff}
-\title{Simulation-Based Q3 Cutoff Determination}
+\title{Simulation-Based \eqn{Q_3} Cutoff Determination}
 \usage{
 RMlocdepQ3Cutoff(
   data,
@@ -12,7 +12,9 @@ RMlocdepQ3Cutoff(
   verbose = FALSE,
   seed = NULL,
   cutoff_method = "hdci",
-  hdci_width = 0.99
+  hdci_width = 0.99,
+  estimator = c("CML", "MML"),
+  dgp = c("resample", "conditional")
 )
 }
 \arguments{
@@ -33,7 +35,7 @@ sequential (single core) processing.}
 
 \item{seed}{Integer or \code{NULL}. Random seed for reproducibility.}
 
-\item{cutoff_method}{Character. Method used to compute per-pair Q3
+\item{cutoff_method}{Character. Method used to compute per-pair \eqn{Q_3}
 credible intervals in \code{pair_cutoffs}. One of \code{"hdci"} (the default,
 Highest Density Continuous Interval via \code{ggdist::hdci()}) or
 \code{"quantile"} (symmetric 2.5th / 97.5th percentiles). Only affects
@@ -43,6 +45,24 @@ Highest Density Continuous Interval via \code{ggdist::hdci()}) or
 \item{hdci_width}{Numeric in (0, 1). Width of the HDCI when
 \code{cutoff_method = "hdci"}. Default \code{0.99}. Ignored when
 \code{cutoff_method = "quantile"}.}
+
+\item{estimator}{Character. Estimation engine for the simulated \eqn{Q_3} values,
+passed through to the per-iteration computation. \code{"CML"} (default) uses
+CML item parameters and WLE person locations; \code{"MML"} uses \code{mirt}. This
+must match the \code{estimator} later given to \code{\link{RMlocdepQ3}}; the
+value is stored in the returned object's \verb{$estimator} and reused
+automatically.}
+
+\item{dgp}{Character. Data-generating process for the parametric bootstrap.
+\code{"resample"} (default) draws person locations by resampling the WLE
+estimates with replacement and simulates responses under the model -- a
+\emph{marginal} null. \code{"conditional"} instead simulates each respondent's
+pattern from the exact Rasch conditional distribution given their observed
+total score (and answered items), with item parameters fixed -- a
+\emph{conditional} null that fixes the score margin and needs no latent
+distribution, avoiding the over-dispersion of resampled point estimates.
+The two give different cut-offs; see the package's comparison study.
+\strong{Experimental.}}
 }
 \value{
 A list with components:
@@ -57,6 +77,11 @@ Used by \code{\link{RMlocdepQ3Plot}}.}
 the method specified by \code{cutoff_method}.}
 \item{\code{actual_iterations}}{Number of successful iterations.}
 \item{\code{sample_n}}{Number of persons in the original data.}
+\item{\code{sample_n_total}}{Equal to \code{sample_n}: no respondents are dropped
+(incomplete responses are retained). Stored for consistency with the
+other \verb{*Cutoff()} objects.}
+\item{\code{sample_has_na}}{Logical. Whether the data contained any missing
+values.}
 \item{\code{sample_summary}}{Summary statistics of estimated person parameters.}
 \item{\code{item_names}}{Character vector of item names from \code{data}.}
 \item{\code{max_diff}, \code{sd_diff}}{Max and SD of the \code{diff} distribution.}
@@ -67,25 +92,30 @@ scalar cutoff for \code{\link{RMlocdepQ3}}.}
 (\code{"hdci"} or \code{"quantile"}).}
 \item{\code{hdci_width}}{The HDCI width used (only meaningful when
 \code{cutoff_method = "hdci"}).}
+\item{\code{estimator}}{The estimator used for the simulated \eqn{Q_3} (\code{"CML"} or
+\code{"MML"}); reused by \code{\link{RMlocdepQ3}} and
+\code{\link{RMlocdepQ3Plot}}.}
+\item{\code{dgp}}{The data-generating process used (\code{"resample"} or
+\code{"conditional"}).}
 }
 }
 \description{
 Uses parametric bootstrap simulation to determine an appropriate cutoff
-value for \code{\link{RMlocdepQ3}}. Under a correctly fitting Rasch model, Q3
-residuals have an unknown distribution; this function simulates that
-distribution and returns empirical percentiles.
+value for \code{\link{RMlocdepQ3}}. Under a correctly fitting Rasch model,
+\eqn{Q_3} residuals have an unknown distribution; this function simulates
+that distribution and returns empirical percentiles.
 }
 \details{
-For each simulation iteration, person parameters (thetas) are resampled
-with replacement from ML estimates, response data are simulated under the
-Rasch model, a \code{mirt} Rasch model is fitted to the simulated data, and Q3
-residuals are extracted. The distribution of \code{max(Q3) - mean(Q3)} across
-iterations provides empirical critical values. Failed iterations (e.g., due
-to convergence issues) are silently discarded.
+The generating model is fitted once: CML item parameters (via
+\code{psychotools}) and WLE person locations. For each simulation iteration,
+those WLE thetas are resampled with replacement, response data are simulated
+under the Rasch / Partial Credit model, the model is refitted, and \eqn{Q_3}
+residuals are computed under \code{estimator}. The distribution of
+\code{max(Q3) - mean(Q3)} across iterations provides empirical critical values.
+Failed iterations (e.g., due to convergence issues) are silently discarded.
 
-Supports both \strong{dichotomous} data (via \code{eRm::RM()} and
-\code{psychotools::rrm()}) and \strong{polytomous} data (via \code{eRm::PCM()} and an
-internal partial credit score simulator).
+Supports both \strong{dichotomous} data (simulated via \code{psychotools::rrm()}) and
+\strong{polytomous} data (via an internal partial credit score simulator).
 
 Parallel processing is provided by the \code{mirai} package (optional). Install
 it with \code{install.packages("mirai")} to enable parallelisation.

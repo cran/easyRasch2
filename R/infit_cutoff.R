@@ -1,7 +1,7 @@
 #' Simulation-Based Infit MSQ Cutoff Determination
 #'
 #' Uses parametric bootstrap simulation to determine appropriate cutoff values
-#' for \code{\link{RMitemInfit}}. This function simulates data from a correctly fitting 
+#' for \code{\link{RMitemInfit}}. This function simulates data from a correctly fitting
 #' Rasch model that mimics your data and returns per-item empirical cutoffs.
 #'
 #' @param data A data.frame or matrix of item responses. Items must be scored
@@ -22,6 +22,14 @@
 #'   `stats::quantile()`.
 #' @param hdci_width Numeric. Width of the HDCI when `cutoff_method = "hdci"`.
 #'   Default is `0.999` (99.9% HDCI). Ignored when `cutoff_method = "quantile"`.
+#' @param dgp Character. Data-generating process for the parametric bootstrap.
+#'   `"resample"` (default) resamples WLE person locations with replacement and
+#'   simulates responses under the model (a *marginal* null). `"conditional"`
+#'   simulates each respondent's pattern from the exact Rasch conditional
+#'   distribution given their observed total score, item parameters fixed (a
+#'   *conditional* null). Because the conditional infit/outfit statistic is
+#'   itself conditional on the total score, `"conditional"` is its naturally
+#'   matched null. \strong{Experimental.}
 #'
 #' @return A list with components:
 #' \describe{
@@ -32,26 +40,29 @@
 #'     computed using the method specified by `cutoff_method`.}
 #'   \item{`actual_iterations`}{Number of successful iterations.}
 #'   \item{`sample_n`}{Number of complete cases used.}
+#'   \item{`sample_n_total`}{Number of respondents in the raw input data,
+#'     before the complete-case filter.}
+#'   \item{`sample_has_na`}{Logical. Whether the raw input data contained
+#'     any missing values.}
 #'   \item{`sample_summary`}{Summary statistics of estimated person parameters.}
 #'   \item{`item_names`}{Character vector of item names from data.}
 #'   \item{`cutoff_method`}{The method used to compute cutoffs (`"hdci"` or
 #'     `"quantile"`).}
 #'   \item{`hdci_width`}{The HDCI width used (only meaningful when
 #'     `cutoff_method = "hdci"`).}
+#'   \item{`dgp`}{The data-generating process used (`"resample"` or
+#'     `"conditional"`).}
 #' }
 #'
 #' @details
-#' For each simulation iteration, person parameters (thetas) are resampled
-#' with replacement from ML estimates, response data are simulated under the
-#' Rasch model, the model is refitted, and conditional infit and outfit MSQ
-#' statistics are computed via `iarm::out_infit()`. The distribution of these
-#' statistics across iterations provides empirical critical values per item.
-#' Failed iterations (e.g., due to convergence issues or degenerate data) are
-#' silently discarded.
-#'
-#' Supports both **dichotomous** data (via `eRm::RM()` and
-#' `psychotools::rrm()`) and **polytomous** data (via `eRm::PCM()` and an
-#' internal partial credit score simulator).
+#' The generating model is CML item parameters (via `psychotools`) with WLE
+#' person locations. For each iteration a dataset is simulated under the chosen
+#' `dgp`, the model is refitted by CML (`psychotools::pcmodel()`, which handles
+#' dichotomous and polytomous data and is accepted by `iarm`), and conditional
+#' infit and outfit MSQ are computed via `iarm::out_infit()`. The distribution
+#' of these statistics across iterations provides empirical critical values per
+#' item. Failed iterations (e.g., degenerate simulated data) are silently
+#' discarded.
 #'
 #' Parallel processing is provided by the `mirai` package (optional). Install
 #' it with `install.packages("mirai")` to enable parallelisation.
@@ -64,24 +75,35 @@
 #'
 #' @examples
 #' \donttest{
-#' set.seed(42)
-#' sim_data <- as.data.frame(
-#'   matrix(sample(0:1, 200 * 10, replace = TRUE), nrow = 200, ncol = 10)
-#' )
-#' colnames(sim_data) <- paste0("Item", 1:10)
+#' if (requireNamespace("iarm", quietly = TRUE) &&
+#'     requireNamespace("ggdist", quietly = TRUE)) {
+#'   set.seed(42)
+#'   sim_data <- as.data.frame(
+#'     matrix(sample(0:1, 200 * 10, replace = TRUE), nrow = 200, ncol = 10)
+#'   )
+#'   colnames(sim_data) <- paste0("Item", 1:10)
 #'
-#' # Run 100 iterations sequentially for a quick demo
-#' cutoff_res <- RMitemInfitCutoff(sim_data, iterations = 100, parallel = FALSE,
-#'                             seed = 42)
-#' cutoff_res$item_cutoffs
+#'   # Run 100 iterations sequentially for a quick demo
+#'   cutoff_res <- RMitemInfitCutoff(sim_data, iterations = 100,
+#'                                   parallel = FALSE, seed = 42)
+#'   cutoff_res$item_cutoffs
 #'
-#' # Use the cutoffs in RMitemInfit()
-#' RMitemInfit(sim_data)
+#'   # Use the cutoffs in RMitemInfit()
+#'   RMitemInfit(sim_data)
 #' }
-RMitemInfitCutoff <- function(data, iterations = 250, parallel = TRUE,
-                           n_cores = NULL, verbose = FALSE, seed = NULL,
-                           cutoff_method = "hdci", hdci_width = 0.999) {
-
+#' }
+RMitemInfitCutoff <- function(
+  data,
+  iterations = 250,
+  parallel = TRUE,
+  n_cores = NULL,
+  verbose = FALSE,
+  seed = NULL,
+  cutoff_method = "hdci",
+  hdci_width = 0.999,
+  dgp = c("resample", "conditional")
+) {
+  dgp <- match.arg(dgp)
   cutoff_method <- match.arg(cutoff_method, c("hdci", "quantile"))
 
   if (cutoff_method == "hdci" && !requireNamespace("ggdist", quietly = TRUE)) {
@@ -108,17 +130,25 @@ RMitemInfitCutoff <- function(data, iterations = 250, parallel = TRUE,
   options(rgl.useNULL = TRUE)
   on.exit(options(rgl.useNULL = old_rgl), add = TRUE)
 
-  # Only complete cases (matching RMitemInfit behaviour)
+  # Only complete cases (matching RMitemInfit behaviour). Record the raw
+  # total and whether anything was dropped so callers (e.g. RMitemInfitPlot)
+  # can report the sample in the standard `n = X of Y respondents` form.
+  n_total <- nrow(as.data.frame(data))
+  has_na <- anyNA(data)
   data <- stats::na.omit(data)
   if (nrow(data) == 0L) {
-    stop("No complete cases in data. All rows contain at least one NA.",
-         call. = FALSE)
+    stop(
+      "No complete cases in data. All rows contain at least one NA.",
+      call. = FALSE
+    )
   }
 
   use_parallel <- parallel && requireNamespace("mirai", quietly = TRUE)
 
   if (parallel && !use_parallel) {
-    message("Install 'mirai' package for parallel processing: install.packages(\"mirai\")")
+    message(
+      "Install 'mirai' package for parallel processing: install.packages(\"mirai\")"
+    )
     message("Running sequentially...")
   }
 
@@ -154,45 +184,49 @@ RMitemInfitCutoff <- function(data, iterations = 250, parallel = TRUE,
 
   item_names_vec <- colnames(data_mat)
 
-  if (is_polytomous) {
-    pcm_fit <- eRm::PCM(data_mat)
-    pp <- eRm::person.parameter(pcm_fit)
-    theta_table <- pp$theta.table[["Person Parameter"]]
-    raw_scores <- rowSums(data_mat, na.rm = TRUE)
-    thetas <- as.numeric(stats::na.omit(theta_table[raw_scores]))
-    thresh_mat <- extract_item_thresholds(data_mat)
-    deltaslist <- lapply(seq_len(nrow(thresh_mat)), function(i) {
-      as.numeric(thresh_mat[i, !is.na(thresh_mat[i, ])])
-    })
-    sim_data_list <- list(
-      type = "polytomous",
-      thetas = thetas,
-      deltaslist = deltaslist,
-      n_items = ncol(data_mat),
-      sample_n = sample_n,
-      item_names = item_names_vec
-    )
+  # Generating model: CML item thresholds (psychotools), computed once. The
+  # conditional infit statistic is conditional on the total score, so the
+  # "conditional" DGP (simulate each respondent's pattern given their observed
+  # score) is the matched null. The "resample" DGP draws WLE person locations
+  # with replacement and simulates parametrically (a marginal null).
+  pool <- .wle_theta_pool(data_mat)
+  thr_list <- pool$thr_list
+  wle_thetas <- pool$thetas
+
+  sim_data_list <- list(
+    dgp = dgp,
+    type = if (is_polytomous) "polytomous" else "dichotomous",
+    thr_list = thr_list,
+    n_items = ncol(data_mat),
+    sample_n = sample_n,
+    item_names = item_names_vec
+  )
+  if (dgp == "resample") {
+    sim_data_list$thetas <- wle_thetas
+    if (is_polytomous) {
+      sim_data_list$deltaslist <- thr_list
+    } else {
+      sim_data_list$item_params <- unlist(thr_list, use.names = FALSE)
+    }
   } else {
-    rm_fit <- eRm::RM(data_mat)
-    pp <- eRm::person.parameter(rm_fit)
-    theta_table <- pp$theta.table[["Person Parameter"]]
-    raw_scores <- rowSums(data_mat, na.rm = TRUE)
-    thetas <- as.numeric(stats::na.omit(theta_table[raw_scores]))
-    item_params <- -rm_fit$betapar
-    sim_data_list <- list(
-      type = "dichotomous",
-      thetas = thetas,
-      item_params = item_params,
-      n_items = ncol(data_mat),
-      sample_n = sample_n,
-      item_names = item_names_vec
-    )
+    sim_data_list$cond_groups <- .cond_groups(data_mat, thr_list)
   }
 
   if (use_parallel) {
-    results_raw <- run_infit_sim_parallel(iterations, sim_seeds, sim_data_list, n_cores, verbose)
+    results_raw <- run_infit_sim_parallel(
+      iterations,
+      sim_seeds,
+      sim_data_list,
+      n_cores,
+      verbose
+    )
   } else {
-    results_raw <- run_infit_sim_sequential(iterations, sim_seeds, sim_data_list, verbose)
+    results_raw <- run_infit_sim_sequential(
+      iterations,
+      sim_seeds,
+      sim_data_list,
+      verbose
+    )
   }
 
   # Filter out failures (character strings indicate errors)
@@ -216,46 +250,52 @@ RMitemInfitCutoff <- function(data, iterations = 250, parallel = TRUE,
 
   # Compute per-item cutoffs
   item_names <- unique(results_df$Item)
-  item_cutoffs <- do.call(rbind, lapply(item_names, function(item) {
-    sub <- results_df[results_df$Item == item, ]
-    if (cutoff_method == "hdci") {
-      # ggdist::hdci() returns a matrix with ncol = 2: column 1 is the lower
-      # bound, column 2 is the upper bound. Row 1 contains the continuous
-      # interval.
-      infit_interval  <- ggdist::hdci(sub$InfitMSQ,  .width = hdci_width)
-      outfit_interval <- ggdist::hdci(sub$OutfitMSQ, .width = hdci_width)
-      data.frame(
-        Item        = item,
-        infit_low   = infit_interval[1L, 1L],
-        infit_high  = infit_interval[1L, 2L],
-        outfit_low  = outfit_interval[1L, 1L],
-        outfit_high = outfit_interval[1L, 2L],
-        stringsAsFactors = FALSE,
-        row.names = NULL
-      )
-    } else {
-      data.frame(
-        Item        = item,
-        infit_low   = stats::quantile(sub$InfitMSQ,  0.025, na.rm = TRUE),
-        infit_high  = stats::quantile(sub$InfitMSQ,  0.975, na.rm = TRUE),
-        outfit_low  = stats::quantile(sub$OutfitMSQ, 0.025, na.rm = TRUE),
-        outfit_high = stats::quantile(sub$OutfitMSQ, 0.975, na.rm = TRUE),
-        stringsAsFactors = FALSE,
-        row.names = NULL
-      )
-    }
-  }))
+  item_cutoffs <- do.call(
+    rbind,
+    lapply(item_names, function(item) {
+      sub <- results_df[results_df$Item == item, ]
+      if (cutoff_method == "hdci") {
+        # ggdist::hdci() returns a matrix with ncol = 2: column 1 is the lower
+        # bound, column 2 is the upper bound. Row 1 contains the continuous
+        # interval.
+        infit_interval <- ggdist::hdci(sub$InfitMSQ, .width = hdci_width)
+        outfit_interval <- ggdist::hdci(sub$OutfitMSQ, .width = hdci_width)
+        data.frame(
+          Item = item,
+          infit_low = infit_interval[1L, 1L],
+          infit_high = infit_interval[1L, 2L],
+          outfit_low = outfit_interval[1L, 1L],
+          outfit_high = outfit_interval[1L, 2L],
+          stringsAsFactors = FALSE,
+          row.names = NULL
+        )
+      } else {
+        data.frame(
+          Item = item,
+          infit_low = stats::quantile(sub$InfitMSQ, 0.025, na.rm = TRUE),
+          infit_high = stats::quantile(sub$InfitMSQ, 0.975, na.rm = TRUE),
+          outfit_low = stats::quantile(sub$OutfitMSQ, 0.025, na.rm = TRUE),
+          outfit_high = stats::quantile(sub$OutfitMSQ, 0.975, na.rm = TRUE),
+          stringsAsFactors = FALSE,
+          row.names = NULL
+        )
+      }
+    })
+  )
   rownames(item_cutoffs) <- NULL
 
   list(
-    results           = results_df,
-    item_cutoffs      = item_cutoffs,
+    results = results_df,
+    item_cutoffs = item_cutoffs,
     actual_iterations = actual_iterations,
-    sample_n          = sample_n,
-    sample_summary    = summary(thetas),
-    item_names        = item_names_vec,
-    cutoff_method     = cutoff_method,
-    hdci_width         = hdci_width
+    sample_n = sample_n,
+    sample_n_total = n_total,
+    sample_has_na = has_na,
+    sample_summary = summary(wle_thetas),
+    item_names = item_names_vec,
+    cutoff_method = cutoff_method,
+    hdci_width = hdci_width,
+    dgp = dgp
   )
 }
 
@@ -273,53 +313,75 @@ RMitemInfitCutoff <- function(data, iterations = 250, parallel = TRUE,
 run_single_infit_sim <- function(seed, data_list) {
   set.seed(seed)
 
-  thetas_res <- sample(data_list$thetas, size = data_list$sample_n, replace = TRUE)
-
-  tryCatch({
-    if (data_list$type == "dichotomous") {
-      sim_mat <- psychotools::rrm(
-        theta = thetas_res,
-        beta = data_list$item_params
-      )
-      sim_df <- as.data.frame(sim_mat$data)
-      colnames(sim_df) <- data_list$item_names
-
-      pos_counts <- colSums(sim_df, na.rm = TRUE)
-      # Fewer than 8 positive responses per item can cause numerical
-      # instability in conditional MLE (eRm) fitting.
-      if (any(pos_counts < 8L)) {
-        return("validation_failed: fewer than 8 positive responses in at least one item")
+  tryCatch(
+    {
+      # --- Generate one simulated dataset under the chosen DGP -----------------
+      if (identical(data_list$dgp, "conditional")) {
+        sim_df <- .sim_cond_dataset(data_list)
+      } else if (data_list$type == "dichotomous") {
+        thetas_res <- sample(
+          data_list$thetas,
+          size = data_list$sample_n,
+          replace = TRUE
+        )
+        sim_df <- as.data.frame(
+          psychotools::rrm(
+            theta = thetas_res,
+            beta = data_list$item_params
+          )$data
+        )
+      } else {
+        thetas_res <- sample(
+          data_list$thetas,
+          size = data_list$sample_n,
+          replace = TRUE
+        )
+        sim_df <- as.data.frame(sim_partial_score(
+          data_list$deltaslist,
+          thetas_res
+        ))
       }
-
-      model_fit <- eRm::RM(sim_df, se = FALSE)
-    } else {
-      sim_mat <- sim_partial_score(data_list$deltaslist, thetas_res)
-      sim_df <- as.data.frame(sim_mat)
       colnames(sim_df) <- data_list$item_names
 
-      n_cats <- vapply(data_list$deltaslist, function(d) length(d) + 1L, integer(1L))
-      for (j in seq_len(ncol(sim_df))) {
-        tab <- tabulate(sim_df[[j]] + 1L, nbins = n_cats[j])
-        if (any(tab == 0L)) {
-          return("validation_failed: not all categories represented")
+      # --- Validate the simulated dataset (estimable refit) --------------------
+      if (data_list$type == "dichotomous") {
+        if (any(colSums(sim_df, na.rm = TRUE) < 8L)) {
+          return(
+            "validation_failed: fewer than 8 positive responses in at least one item"
+          )
+        }
+      } else {
+        n_cats <- vapply(
+          data_list$thr_list,
+          function(d) length(d) + 1L,
+          integer(1L)
+        )
+        for (j in seq_len(ncol(sim_df))) {
+          tab <- tabulate(sim_df[[j]] + 1L, nbins = n_cats[j])
+          if (any(tab == 0L)) {
+            return("validation_failed: not all categories represented")
+          }
         }
       }
 
-      model_fit <- psychotools::pcmodel(sim_df, hessian = FALSE)
+      # Conditional infit/outfit from a CML refit. psychotools::pcmodel() handles
+      # both polytomous and dichotomous (a 2-category PCM is the Rasch model) and
+      # is accepted by iarm::out_infit(); it matches eRm to ~1e-6 but is faster.
+      model_fit <- psychotools::pcmodel(sim_df)
+      cfit <- iarm::out_infit(model_fit)
+
+      data.frame(
+        Item = data_list$item_names,
+        InfitMSQ = round(cfit$Infit, 3),
+        OutfitMSQ = round(cfit$Outfit, 3),
+        stringsAsFactors = FALSE,
+        row.names = NULL
+      )
+    },
+    error = function(e) {
+      as.character(conditionMessage(e))
     }
-
-    cfit <- iarm::out_infit(model_fit)
-
-    data.frame(
-      Item      = data_list$item_names,
-      InfitMSQ  = round(cfit$Infit,  3),
-      OutfitMSQ = round(cfit$Outfit, 3),
-      stringsAsFactors = FALSE,
-      row.names = NULL
-    )
-  }, error = function(e) {
-    as.character(conditionMessage(e))
-  })
+  )
 }
 
 # ---------------------------------------------------------------------------
@@ -335,8 +397,13 @@ run_single_infit_sim <- function(seed, data_list) {
 #' @param verbose Show progress bar.
 #' @return List of raw results (one element per iteration).
 #' @keywords internal
-run_infit_sim_parallel <- function(iterations, sim_seeds, sim_data_list,
-                                   n_cores, verbose = FALSE) {
+run_infit_sim_parallel <- function(
+  iterations,
+  sim_seeds,
+  sim_data_list,
+  n_cores,
+  verbose = FALSE
+) {
   mirai::daemons(n_cores)
   on.exit(mirai::daemons(0), add = TRUE)
 
@@ -356,7 +423,11 @@ run_infit_sim_parallel <- function(iterations, sim_seeds, sim_data_list,
       data_list = sim_data_list,
       run_single_infit_sim = run_single_infit_sim,
       sim_partial_score = sim_partial_score,
-      sim_poly_item = sim_poly_item
+      sim_poly_item = sim_poly_item,
+      # Conditional-DGP generators (shared with the Q3 cutoff).
+      .sim_cond_dataset = .sim_cond_dataset,
+      .sim_conditional = .sim_conditional,
+      .esf_convolve = .esf_convolve
     )
   })
 
@@ -395,8 +466,12 @@ run_infit_sim_parallel <- function(iterations, sim_seeds, sim_data_list,
 #' @param verbose Show progress bar.
 #' @return List of raw results (one element per iteration).
 #' @keywords internal
-run_infit_sim_sequential <- function(iterations, sim_seeds, sim_data_list,
-                                     verbose = FALSE) {
+run_infit_sim_sequential <- function(
+  iterations,
+  sim_seeds,
+  sim_data_list,
+  verbose = FALSE
+) {
   if (verbose) {
     pb <- utils::txtProgressBar(min = 0, max = iterations, style = 3)
   }

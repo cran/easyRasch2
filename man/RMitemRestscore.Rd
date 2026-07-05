@@ -4,7 +4,7 @@
 \alias{RMitemRestscore}
 \title{Item Restscore Analysis}
 \usage{
-RMitemRestscore(data, output = "kable", sort, p.adj = "BH")
+RMitemRestscore(data, output = "kable", sort, p_adj = "BH")
 }
 \arguments{
 \item{data}{A data.frame or matrix of item responses. Items must be scored
@@ -19,20 +19,22 @@ but at least one complete case (row with no \code{NA}) must be present.}
 by the absolute magnitude of \code{Difference} in descending order, so that
 both over- and underfitting items appear near the top.}
 
-\item{p.adj}{Character string specifying the p-value adjustment method
-passed to \code{iarm::item_restscore()}. Default \code{"BH"} (Benjamini-Hochberg).
-See \code{\link[stats:p.adjust]{stats::p.adjust()}} for available methods.}
+\item{p_adj}{Character string specifying the p-value adjustment method
+passed to \code{iarm::item_restscore()}. Default \code{"BH"} (Benjamini-Hochberg);
+use \code{"none"} for unadjusted p-values. Run \code{?stats::p.adjust} for the list
+of available methods.}
 }
 \value{
 \itemize{
 \item If \code{output = "kable"}: a \code{knitr_kable} object (plain text table via
 \code{format = "pipe"}) with columns for item name, observed and expected
 restscore correlations, the signed difference (observed minus
-expected), adjusted p-value, significance level, item location, and
-item location relative to the sample mean person location.
+expected), adjusted p-value, the \code{Flagged} misfit label, and item
+location relative to the sample mean person location.
 \item If \code{output = "dataframe"}: a data.frame with columns \code{Item}, \code{Observed},
-\code{Expected}, \code{Difference}, \code{p_adjusted}, \code{Significance},
-\code{Location}, and \code{Relative_location}.
+\code{Expected}, \code{Difference}, \code{p_adjusted}, \code{Flagged}, and
+\code{Relative_location}. \code{Flagged} is \code{"overfit"} (observed above expected,
+adj. p < .05), \code{"underfit"} (below, adj. p < .05), or \code{""} (not flagged).
 }
 
 The \code{Difference} column is signed (observed minus expected):
@@ -54,14 +56,12 @@ the association between a person's score on a single item and their total
 score on the remaining items (the "restscore"). Under a correctly fitting
 Rasch model, observed and model-expected correlations should agree closely.
 
-For \strong{dichotomous} data (maximum score = 1), a Rasch model is fitted via
-\code{eRm::RM()}. Item locations are the negative beta parameters. Person
-locations are estimated via \code{eRm::person.parameter()}.
-
-For \strong{polytomous} data (maximum score > 1), a Partial Credit Model is
-fitted via \code{eRm::PCM()}. Item average locations are the row-means of the
-threshold parameter table returned by \code{eRm::thresholds()}. Person locations
-are estimated via \code{eRm::person.parameter()}.
+Item parameters are estimated by conditional maximum likelihood via
+\code{psychotools::pcmodel()} (a dichotomous item is a 2-category PCM); the
+item-restscore statistic itself comes from \code{iarm::item_restscore()} and is
+conditional on the total score, so it is invariant to the estimation engine.
+Per-item average locations are the means of the CML thresholds, and the
+person-location reference is the mean of the Warm WLE estimates.
 
 Relative item location is defined as the item's average location minus the
 sample mean person location, providing a measure of item targeting.
@@ -70,21 +70,23 @@ The \code{iarm} package must be installed (it is in Suggests, not Imports).
 }
 \examples{
 \donttest{
-# Simulate binary item response data (8 items, 200 persons)
-set.seed(42)
-sim_data <- as.data.frame(
-  matrix(sample(0:1, 200 * 8, replace = TRUE), nrow = 200, ncol = 8)
-)
-colnames(sim_data) <- paste0("Item", 1:8)
+if (requireNamespace("iarm", quietly = TRUE)) {
+  # Simulate binary item response data (8 items, 200 persons)
+  set.seed(42)
+  sim_data <- as.data.frame(
+    matrix(sample(0:1, 200 * 8, replace = TRUE), nrow = 200, ncol = 8)
+  )
+  colnames(sim_data) <- paste0("Item", 1:8)
 
-# Default kable output
-RMitemRestscore(sim_data)
+  # Default kable output
+  RMitemRestscore(sim_data)
 
-# Sorted by absolute difference
-RMitemRestscore(sim_data, sort = "diff")
+  # Sorted by absolute difference
+  RMitemRestscore(sim_data, sort = "diff")
 
-# Return as data.frame for further processing
-df <- RMitemRestscore(sim_data, output = "dataframe")
+  # Return as data.frame for further processing
+  df <- RMitemRestscore(sim_data, output = "dataframe")
+}
 }
 }
 \references{

@@ -1,6 +1,11 @@
 # easyRasch2
 
 <!-- badges: start -->
+[![CRAN Version](https://www.r-pkg.org/badges/version/easyRasch2)](https://cran.r-project.org/package=easyRasch2)
+[![Downloads](https://cranlogs.r-pkg.org/badges/easyRasch2?color=brightgreen)](https://CRAN.R-project.org/package=easyRasch2)
+![Downloads Status](https://cranlogs.r-pkg.org/badges/grand-total/easyRasch2)
+[![R-CMD-check](https://github.com/pgmj/easyRasch2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/pgmj/easyRasch2/actions/workflows/R-CMD-check.yaml)
+[![Codecov test coverage](https://codecov.io/gh/pgmj/easyRasch2/graph/badge.svg)](https://app.codecov.io/gh/pgmj/easyRasch2)
 <a href="https://buymeacoffee.com/pgmj" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 <!-- badges: end -->
 
@@ -16,50 +21,100 @@ sample.
 
 The [Get Started](https://pgmj.github.io/easyRasch2/articles/easyRasch2.html) link above contains a short introduction. For broader Rasch-analysis tutorials, see the
 [vignette](https://pgmj.github.io/raschrvignette/RaschRvign.html) for the
-sibling package [`easyRasch`](https://pgmj.github.io/easyRasch/).
+archived sibling package [`easyRasch`](https://pgmj.github.io/easyRasch/).
+
+## Statement of need
+
+A complete Rasch analysis requires many separate procedures — item fit, local
+dependence, dimensionality, differential item functioning, reliability,
+targeting, and more. In R these are spread across packages with differing data formats,
+argument conventions, and output objects, which raises the barrier to entry and
+can make analyses hard to reproduce. A further problem is that fit statistics
+(item fit MSQ, Yen's $Q_3$ residuals, the first residual-PCA contrast, CFA fit indices) are
+usually judged against fixed rule-of-thumb cutoffs that are known to depend on
+sample size, number of items and other factors such as targeting, and the number of response categories.
+
+`easyRasch2` targets applied researchers and students validating rating scales
+and tests in health, education, and psychology using modern psychometric methods. It provides a single,
+consistently named interface across the whole workflow with publication-ready
+output, and — as its distinguishing feature — replaces rule-of-thumb cutoffs
+with sample-specific critical values obtained by parametric bootstrap from the
+fitted Rasch/PCM model (Johansson, 2025). Several methods, including the
+polytomous Martin-Löf test with Monte Carlo *p*-values (Christensen & Kreiner, 2007) and the bootstrap
+item-restscore test, are not available in other R packages.
+
+## Installation
+
+Install from CRAN:
+
+```r
+install.packages("easyRasch2")
+```
+
+Install the development version from GitHub:
+
+```r
+# install.packages("remotes") # if needed
+remotes::install_github("pgmj/easyRasch2")
+```
 
 ## Key design principles
 
-- **Estimation**: Conditional Maximum Likelihood (CML) via `eRm`,
-  `psychotools`, and `iarm` for item parameters; Weighted Likelihood
-  Estimation (WLE) for person parameters; `mirt` (MML) only where CML
-  alternatives do not exist (e.g., Q3 residual correlations).
+- **Estimation**: a single engine across the package — Conditional Maximum
+  Likelihood (CML) item parameters via `psychotools` and Warm's Weighted
+  Likelihood Estimation (WLE) for person parameters. `eRm` is used for
+  Andersen's LR test (`RMdifLR()`); `mirt` (MML) is available as an optional
+  engine (`estimator = "MML"` in `RMlocdepQ3()` and `RMitemParameters()`)
+  and for the plausible values behind the RMU reliability metric.
+- **Inference**: simulation-based cutoffs throughout, with optional
+  bootstrap *p*-values (`p_value = TRUE`) using Westfall–Young family-wise
+  correction (default) or FDR alternatives (Ferreira, 2024).
 - **Output**: `knitr::kable()` for tables (Quarto-friendly), `ggplot2`
   for figures, and `"dataframe"` output options for downstream use.
+  Every caption reports the estimation sample size and missing-data policy.
 - **Naming**: Functions use the `RM` prefix (e.g., `RMlocdepQ3()`).
 
 ## Functions by domain
 
 ### Item fit
 
-- `RMitemInfit()` — conditional infit MSQ
-- `RMitemInfitCutoff()` + `RMitemInfitCutoffPlot()` — simulation-based cutoffs and plot
+- `RMitemInfit()` — conditional infit MSQ; optional bootstrap *p*-values
+  (`p_value = TRUE`) with family-wise (Westfall–Young) or FDR multiple-comparison
+  correction
+- `RMitemInfitCutoff()` + `RMitemInfitPlot()` — simulation-based cutoffs and plot
 - `RMitemInfitMI()` + `RMitemInfitCutoffMI()` — multiple-imputation variants
-- `RMitemRestscore()` — item-restscore with Goodman-Kruskal's gamma
+- `RMitemRestscore()` — item-restscore with Goodman-Kruskal's $\gamma$ (gamma)
 - `RMitemRestscoreBoot()` — non-parametric bootstrap of item-restscore fit
 - `RMitemICCPlot()` - conditional item characteristic curves
 
 ### Local dependence
 
-- `RMlocdepQ3()` + `RMlocdepQ3Cutoff()` — Yen's Q3 residual correlations
-- `RMlocdepGamma()` + `RMlocdepGammaCutoff()` + `RMlocdepGammaPlot()` — partial-gamma local dependence
+- `RMlocdepQ3()` + `RMlocdepQ3Cutoff()` + `RMlocdepQ3Plot()` — Yen's $Q_3$
+  residual correlations (CML/WLE by default, `estimator = "MML"` optional);
+  table and plot share a `$matrix` ($Q_3$ heatmap) / `$pairs` (per-pair
+  observed-vs-simulated) structure; optional per-pair bootstrap *p*-values
+- `RMlocdepGamma()` + `RMlocdepGammaCutoff()` + `RMlocdepGammaPlot()` —
+  partial-$\gamma$ local dependence; optional per-pair bootstrap *p*-values
 
 ### Dimensionality / unidimensionality
 
 - `RMdimResidualPCA()` + `RMdimResidualPCACutoff()` — PCA of standardized residuals,
-  with simulation-based first-contrast cutoff (Chou & Wang, 2010)
+  with simulation-based first-contrast cutoff (Chou & Wang, 2010) and an
+  optional bootstrap *p*-value
 - `RMdimMartinLof()` + `RMdimMartinLofResiduals()` — Martin-Löf LR test
-  (Christensen & Kreiner, 2007), supports polytomous data
-- `RMdimCFACutoff()` + `RMdimCFAPlot()` — posterior-predictive CFA fit-index
-  cutoffs under PCM unidimensionality (via `lavaan` WLSMV)
+  (Christensen & Kreiner, 2007), supports polytomous data with Monte Carlo *p*-values
+- `RMdimCFACutoff()` + `RMdimCFA()` + `RMdimCFAPlot()` — posterior-predictive CFA
+  fit-index and per-item loading checks under PCM unidimensionality (via `lavaan`
+  WLSMV) with simulation-based cutoffs and optional bootstrap *p*-values
 
 ### Differential item functioning
 
 - `RMdifLR()` — Andersen's likelihood-ratio test (`eRm::LRtest`)
 - `RMdifTree()` — Rasch / partial-credit trees (`psychotree`) with
-  Mantel-Haenszel or partial-gamma effect sizes per split, optional
+  Mantel-Haenszel or partial-$\gamma$ effect sizes per split, optional
   iterative purification, and `stablelearner`-based stability assessment
-- `RMdifGamma()` + `RMdifGammaCutoff()` + `RMdifGammaPlot()` — partial-gamma DIF
+- `RMdifGamma()` + `RMdifGammaCutoff()` + `RMdifGammaPlot()` — partial-$\gamma$
+  DIF; optional bootstrap *p*-values calibrated against the simulated Rasch null
 - `RMitemICCPlot()` - evaluates DIF across class intervals
 
 ### Item category threshold ordering
@@ -70,24 +125,30 @@ sibling package [`easyRasch`](https://pgmj.github.io/easyRasch/).
 
 ### Reliability, targeting, score conversion
 
-- `RMreliability()` + `RMUreliability()` — Cronbach's α, PSI, empirical
+- `RMreliability()` + `RMUreliability()` — Cronbach's α, PSI, marginal
   reliability, and Relative Measurement Uncertainty from plausible values
 - `RMtargeting()` — Wright-map style person-item targeting plot
 - `RMscoreSE()` — raw-score → logit transformation table (WLE / EAP)
+
+### Item & person parameters
+
+- `RMitemParameters()` — item difficulty / threshold locations in long or wide
+  format, with optional standard errors and confidence intervals (CML via
+  `psychotools`, or MML via `mirt` for sparse data)
+- `RMpersonParameters()` — per-respondent person locations (WLE or EAP),
+  estimated on each response pattern so partial missingness is handled directly
+
+### Person fit
+
+- `RMpersonFit()` — per-respondent conditional infit / outfit MSQ and the
+  standardized log-likelihood $\ell_z$, with resampling-based *p*-values rather
+  than unreliable asymptotic nulls (Sinharay, 2016; Müller, 2020)
 
 ### Data visualization
 
 - `RMplotTile()` — response-distribution heatmap with optional group faceting
 - `RMplotBar()` & `RMplotStackedbar()`
 
-## Installation
-
-Install the development version from GitHub:
-
-```r
-# install.packages("remotes")
-remotes::install_github("pgmj/easyRasch2")
-```
 
 ## Example
 
@@ -102,9 +163,13 @@ simfit <- RMitemInfitCutoff(pcmdat2, iterations = 250)
 RMitemInfit(pcmdat2, cutoff = simfit)
 
 # Test of unidimensionality via posterior-predictive ordinal CFA
-cfa_res <- RMdimCFACutoff(pcmdat2, iterations = 250)
-cfa_res                # kable: observed vs simulated cutoffs
-RMdimCFAPlot(cfa_res)     # histogram + observed diamond
+cfa_sim <- RMdimCFACutoff(pcmdat2, iterations = 250)   # simulated reference
+tabs <- RMdimCFA(pcmdat2, cutoff = cfa_sim)            # observed vs expected
+tabs$fit                                                # fit-index table
+tabs$loadings                                           # per-item loading table
+plots <- RMdimCFAPlot(cfa_sim, data = pcmdat2)          # list of 2 ggplots
+plots$loadings                                          # observed vs expected loadings
+plots$fit                                               # fit-index distributions
 
 # DIF analysis via Andersen's LR test
 grp <- factor(sample(c("A", "B"), nrow(pcmdat2), replace = TRUE))
@@ -137,6 +202,11 @@ RMdifTree(pcmdat2, covariates = covs)
   Yen's Q3: Identification of local dependence in the Rasch model using
   residual correlations. *Applied Psychological Measurement, 41*(3), 178–194.
   <https://doi.org/10.1177/0146621616677520>
+- Ferreira, J. A. (2024). Methods of testing a 'small' or 'moderate' number of
+  hypotheses simultaneously: An account focusing on the control of the
+  probability of at least one incorrect rejection and of the false discovery
+  rate. *Journal of Statistical Theory and Practice, 19*(6).
+  <https://doi.org/10.1007/s42519-024-00412-4>
 - Henninger, M., Debelak, R., & Strobl, C. (2023). A new stopping criterion
   for Rasch trees based on the Mantel-Haenszel effect size measure for DIF.
   *Educational and Psychological Measurement, 83*, 181–212.
@@ -161,6 +231,9 @@ RMdifTree(pcmdat2, covariates = covs)
 - Rosseel, Y. (2012). lavaan: An R package for structural equation modeling.
   *Journal of Statistical Software, 48*(2), 1–36.
   <https://doi.org/10.18637/jss.v048.i02>
+- Sinharay, S. (2016). Assessment of person fit using resampling-based
+  approaches. *Journal of Educational Measurement, 53*(1), 63–85.
+  <https://doi.org/10.1111/jedm.12101>
 - Strobl, C., Kopf, J., & Zeileis, A. (2015). Rasch trees: A new method for
   detecting DIF in the Rasch model. *Psychometrika, 80*, 289–316.
   <https://doi.org/10.1007/s11336-013-9388-3>
@@ -168,17 +241,17 @@ RMdifTree(pcmdat2, covariates = covs)
 
 ## Credits
 
-As mentioned earlier, this is based on my `easyRasch` package, and I am using Claude
-to "transfer" functions to this more properly formatted package. While it uses
-my earlier code, most of the code in this package is produced by the LLM and
-bug fixed by me.
+As mentioned earlier, this is based on my `easyRasch` package, and I am using
+Claude Opus/Fable to rewrite functions to this more properly formatted package.
+While it uses my earlier code, most of the code in this package is produced by
+the LLM and tested and bug fixed by me.
 
 `RMdifTree()` adapts MIT-licensed code from Mirka Henninger and Jan Radek's
 [`raschtreeMH`](https://github.com/mirka-henninger/raschtreeMH) and
 [`effecttree`](https://github.com/mirka-henninger/effecttree) packages for
 the effect-size and ETS-classification algorithms.
 
-[Magnus Johansson](https://ki.se/en/people/magnus-johansson-3) is a licensed psychologist with a PhD in behavior analysis. He works as a research specialist at [Karolinska Institutet](https://ki.se/en/cns/research/centre-for-psychiatry-research), Department of Clinical Neuroscience, Center for Psychiatry Research.
+[Magnus Johansson](https://ki.se/en/people/magnus-johansson-3) is a licensed psychologist with a PhD in behavior analysis. He works as a research specialist focused on psychometrics and statistics at [Karolinska Institutet](https://ki.se/en/cns/research/centre-for-psychiatry-research), Department of Clinical Neuroscience, Center for Psychiatry Research.
 
 - ORCID: [0000-0003-1669-592X](https://orcid.org/0000-0003-1669-592X)
 - Bluesky: [@pgmj.bsky.social](https://bsky.app/profile/pgmj.bsky.social) 

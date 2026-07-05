@@ -65,22 +65,24 @@ that coincides with the item location; the hierarchy plot is
 visually degenerate in that case. For dichotomous data use
 \code{\link[=RMtargeting]{RMtargeting()}} or \code{\link[=RMscoreSE]{RMscoreSE()}} instead.
 
-\strong{Centring convention.} The PCM thresholds returned by
-\code{\link[eRm:thresholds]{eRm::thresholds()}} are shifted so that their grand mean is zero;
+\strong{Centring convention.} The CML PCM thresholds (estimated via
+\code{psychotools::pcmodel()}) are shifted so that their grand mean is zero;
 each item's location is then the mean of its centred thresholds.
 The dashed horizontal reference line on the plot marks this zero --
 i.e., the average threshold across all items.
 }
 \examples{
 \donttest{
-data("pcmdat2", package = "eRm")
-RMitemHierarchy(pcmdat2)
+if (requireNamespace("eRm", quietly = TRUE)) {
+  data("pcmdat2", package = "eRm")
+  RMitemHierarchy(pcmdat2)
 
-# 95\% CI instead of 84\%
-RMitemHierarchy(pcmdat2, sem_multiplier = 1.96)
+  # 95\% CI instead of 84\%
+  RMitemHierarchy(pcmdat2, sem_multiplier = 1.96)
 
-# Underlying data.frame
-RMitemHierarchy(pcmdat2, output = "dataframe")
+  # Underlying data.frame
+  RMitemHierarchy(pcmdat2, output = "dataframe")
+}
 }
 
 }

@@ -4,7 +4,13 @@
 \alias{RMdimResidualPCA}
 \title{PCA of Standardized Rasch Residuals}
 \usage{
-RMdimResidualPCA(data, cutoff = NULL, n_components = 5L, output = "kable")
+RMdimResidualPCA(
+  data,
+  cutoff = NULL,
+  p_value = FALSE,
+  n_components = 5L,
+  output = "kable"
+)
 }
 \arguments{
 \item{data}{A data.frame or matrix of item responses. Items must be scored
@@ -17,30 +23,42 @@ cutoff directly. When provided, the result includes a \code{Flagged} column
 (logical: is the eigenvalue above the simulated bound?) and the kable
 caption notes the cutoff.}
 
+\item{p_value}{Logical. When \code{TRUE}, adds a one-sided bootstrap p-value for
+the first-contrast eigenvalue: the proportion of simulated first-contrast
+eigenvalues at least as large as the observed one,
+\verb{(1 + #\\\{lambda* >= lambda\\\}) / (B + 1)}. Requires the \strong{full}
+\code{\link{RMdimResidualPCACutoff}} object as \code{cutoff} (it carries the
+simulated eigenvalues in \verb{$results}); a bare numeric cutoff is not
+sufficient. The simulated null is the distribution of the \emph{largest}
+eigenvalue, so the p-value applies to PC1 only (\code{NA} for the other
+components). This is a single test — no multiplicity correction is
+involved. Default \code{FALSE}.}
+
 \item{n_components}{Integer. Number of eigenvalues to report. Capped at the
 number of items. Default \code{5}.}
 
 \item{output}{Character. \code{"kable"} (default) for a formatted
 \code{knitr::kable()} table, \code{"dataframe"} for the underlying data.frame, or
-\code{"loadings"} for a ggplot of PC1 loadings against item locations
-(similar in spirit to the loadings-by-location plot used in
-\code{easyRasch::RIloadLoc}).}
+\code{"ggplot"} for a ggplot of PC1 loadings against item locations.
+\code{"loadings"} is accepted as a backward-compatible alias for \code{"ggplot"}.}
 }
 \value{
 \itemize{
 \item If \code{output = "kable"}: a \code{knitr_kable} object with columns Component,
 Eigenvalue, Proportion of variance (and \code{Flagged} when \code{cutoff} is
-provided). The caption gives the variance partition (\% of total observed
-variance explained by measures vs. unexplained), the model fitted,
-sample size, and cutoff metadata if applicable.
+provided; \code{p} when \code{p_value = TRUE}). The caption gives the variance
+partition (\% of total observed variance explained by measures vs.
+unexplained), the model fitted, sample size, and cutoff/p-value metadata
+if applicable.
 \item If \code{output = "dataframe"}: a data.frame with columns \code{Component},
 \code{Eigenvalue}, \code{Proportion_of_variance} (and \code{Flagged} when \code{cutoff} is
-provided). The variance partition is attached as the
+provided; \code{p} when \code{p_value = TRUE}, non-\code{NA} for PC1 only). The
+variance partition is attached as the
 \code{"variance_partition"} attribute — a list with elements \code{total},
 \code{explained}, \code{unexplained}, \code{pct_explained}, \code{pct_unexplained},
 \code{n_persons}. Access via
 \code{attr(result, "variance_partition")}.
-\item If \code{output = "loadings"}: a ggplot showing each item's PC1 loading on
+\item If \code{output = "ggplot"}: a ggplot showing each item's PC1 loading on
 the x-axis and Rasch item location on the y-axis, with dashed reference
 lines at zero, and the variance partition in the figure caption. Item
 names are labelled via \code{ggrepel::geom_text_repel()} when \code{ggrepel} is
@@ -48,9 +66,9 @@ installed; otherwise plain \code{geom_text()}.
 }
 }
 \description{
-Fits a Rasch model (\code{eRm::RM()} for dichotomous data, \code{eRm::PCM()} for
-polytomous data — chosen automatically), extracts standardized residuals
-via \code{eRm::itemfit()$st.res}, and runs an unrotated principal-component
+Fits a Rasch model by CML via \code{psychotools} (a dichotomous item is a
+2-category PCM), extracts the standardized residuals \eqn{(x - E)/\sqrt{Var}}
+at WLE person locations, and runs an unrotated principal-component
 analysis on those residuals via \code{stats::prcomp()}. The function reports
 the top \code{n_components} eigenvalues and their proportions of unexplained
 variance, and optionally compares the first-contrast eigenvalue against
@@ -66,24 +84,31 @@ bounds tailored to the data structure should be used instead — see
 \code{\link{RMdimResidualPCACutoff}}, and Chou & Wang (2010) for the underlying
 simulation argument.
 
-The PCA is performed on the standardized residuals returned by
-\code{eRm::itemfit()$st.res}, which are \code{(observed - expected) / sqrt(var)}
-under the Rasch model. The reported eigenvalues are unrotated; rotation
-is appropriate for \emph{interpreting} a multidimensional solution but obscures
-the dominant first contrast that dimensionality assessment is concerned
-with.
+The PCA is performed on the standardized residuals
+\eqn{(x - E)/\sqrt{Var}} from the shared CML/WLE engine (CML item
+parameters via \code{psychotools}, WLE person locations). The reported
+eigenvalues are unrotated; rotation is appropriate for \emph{interpreting} a
+multidimensional solution but obscures the dominant first contrast that
+dimensionality assessment is concerned with.
 
-Item locations on the loadings plot are computed as the per-item mean of
-Andrich thresholds for polytomous data (PCM) or as \code{-beta} for dichotomous
-data (RM).
+Item locations on the loadings plot are the per-item mean of the CML
+Andrich thresholds.
 
-The variance partition follows Linacre's CML/MLE convention: per-item
-observed variance is compared to per-item \emph{expected} variance under the
-fitted model, summed across items. Expected scores are computed from
-MLE person locations (via \code{eRm::person.parameter()}) and the CML item
-parameters from \code{eRm::RM()} / \code{eRm::PCM()}. Persons with extreme raw
-scores (no finite MLE theta) are excluded from the partition, matching
-the sample used by \code{eRm::SepRel()} and the PCA itself.
+The variance partition follows Linacre's convention: per-item observed
+variance is compared to per-item \emph{expected} variance under the fitted
+model, summed across items. Expected scores are computed from the CML item
+parameters and WLE person locations. WLE is finite at extreme scores, so
+all persons are retained (the previous MLE partition dropped extreme-score
+cases).
+
+\strong{Bootstrap p-value.} When \code{p_value = TRUE}, the observed
+first-contrast eigenvalue is compared against the simulated null
+distribution of largest eigenvalues (from \code{cutoff$results}), giving the
+one-sided Monte-Carlo p-value \verb{(1 + #\\\{lambda* >= lambda\\\}) / (B + 1)}.
+Because the maximum eigenvalue is a single family-wise statistic, no
+multiplicity correction applies. The p-value is model-conditional and
+sample-size-sensitive; it is reported alongside the simulated cutoff, not
+in place of it, and can be no smaller than \code{1 / (B + 1)}.
 }
 \examples{
 \donttest{
@@ -97,11 +122,17 @@ colnames(dat) <- paste0("I", 1:12)
 RMdimResidualPCA(dat)
 
 # PC1 loadings vs item location plot
-RMdimResidualPCA(dat, output = "loadings")
+if (requireNamespace("ggplot2", quietly = TRUE) &&
+    requireNamespace("ggrepel", quietly = TRUE)) {
+  RMdimResidualPCA(dat, output = "ggplot")
+}
 
 # Simulation-based cutoff (use 250+ iterations in real analyses)
 bound <- RMdimResidualPCACutoff(dat, iterations = 50, parallel = FALSE, seed = 1)
 RMdimResidualPCA(dat, cutoff = bound)
+
+# With the one-sided bootstrap p-value for the first contrast
+RMdimResidualPCA(dat, cutoff = bound, p_value = TRUE)
 }
 }
 \references{

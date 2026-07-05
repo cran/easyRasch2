@@ -11,6 +11,7 @@ make_dichotomous <- function(n = 200, k = 8, seed = 1L) {
 # Input validation
 # ---------------------------------------------------------------------
 test_that("RMitemRestscoreBoot errors when data has non-zero minimum", {
+  skip_if_not_installed("iarm")
   df <- make_dichotomous() + 1L
   expect_error(RMitemRestscoreBoot(df), regexp = "scored starting at 0")
 })
@@ -19,7 +20,7 @@ test_that("RMitemRestscoreBoot errors when data has non-zero minimum", {
 # Output structures
 # ---------------------------------------------------------------------
 test_that("RMitemRestscoreBoot output = 'dataframe' returns one row per item × classification", {
-  skip_if_not_installed("eRm")
+  skip_on_cran()
   skip_if_not_installed("iarm")
   df <- make_dichotomous()
   res <- RMitemRestscoreBoot(df, iterations = 10L, samplesize = 100L,
@@ -33,7 +34,7 @@ test_that("RMitemRestscoreBoot output = 'dataframe' returns one row per item × 
 })
 
 test_that("RMitemRestscoreBoot output = 'raw' returns per-iteration data", {
-  skip_if_not_installed("eRm")
+  skip_on_cran()
   skip_if_not_installed("iarm")
   df <- make_dichotomous()
   res <- RMitemRestscoreBoot(df, iterations = 10L, samplesize = 100L,
@@ -44,7 +45,7 @@ test_that("RMitemRestscoreBoot output = 'raw' returns per-iteration data", {
 })
 
 test_that("RMitemRestscoreBoot output = 'kable' returns a knitr_kable", {
-  skip_if_not_installed("eRm")
+  skip_on_cran()
   skip_if_not_installed("iarm")
   skip_if_not_installed("knitr")
   df  <- make_dichotomous()
@@ -55,7 +56,7 @@ test_that("RMitemRestscoreBoot output = 'kable' returns a knitr_kable", {
 })
 
 test_that("RMitemRestscoreBoot is reproducible with the same seed", {
-  skip_if_not_installed("eRm")
+  skip_on_cran()
   skip_if_not_installed("iarm")
   df <- make_dichotomous()
   r1 <- RMitemRestscoreBoot(df, iterations = 5L, samplesize = 100L,

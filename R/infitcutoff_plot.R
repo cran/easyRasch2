@@ -16,12 +16,12 @@
 #'   starting at 0 (non-negative integers). When provided, the plot includes
 #'   orange diamond markers for the observed infit/outfit MSQ alongside the
 #'   simulated distribution, plus segment summaries from the cutoff intervals.
-#' @param output Character string. Either `"infit"` (default) to show only the
+#' @param statistic Character string. Either `"infit"` (default) to show only the
 #'   infit panel, `"outfit"` to show only the outfit panel, or `"both"` to show
 #'   infit and outfit side by side (requires the `patchwork` package when
 #'   `data` is supplied).
 #'
-#' @return A `ggplot` object (or a `patchwork` object when `output = "both"`
+#' @return A `ggplot` object (or a `patchwork` object when `statistic = "both"`
 #'   and `data` is supplied).
 #'
 #' @details
@@ -32,9 +32,10 @@
 #'
 #' When `data` **is** supplied, the function:
 #' \enumerate{
-#'   \item Fits a Rasch model (`eRm::RM()` for dichotomous data or
-#'     `eRm::PCM()` for polytomous data) and computes observed conditional
-#'     infit and outfit MSQ via `iarm::out_infit()`.
+#'   \item Fits a Rasch / Partial Credit model by CML via
+#'     `psychotools::pcmodel()` (a dichotomous item is a 2-category PCM)
+#'     and computes observed conditional infit and outfit MSQ via
+#'     `iarm::out_infit()`.
 #'   \item Overlays observed fit values as orange diamond markers on the
 #'     simulated distributions.
 #'   \item Shows per-item cutoff intervals (from `simfit$item_cutoffs`) as
@@ -52,48 +53,58 @@
 #'
 #' @examples
 #' \donttest{
-#' set.seed(42)
-#' sim_data <- as.data.frame(
-#'   matrix(sample(0:1, 200 * 10, replace = TRUE), nrow = 200, ncol = 10)
-#' )
-#' colnames(sim_data) <- paste0("Item", 1:10)
+#' if (requireNamespace("iarm", quietly = TRUE) &&
+#'     requireNamespace("ggdist", quietly = TRUE) &&
+#'     requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(42)
+#'   sim_data <- as.data.frame(
+#'     matrix(sample(0:1, 200 * 10, replace = TRUE), nrow = 200, ncol = 10)
+#'   )
+#'   colnames(sim_data) <- paste0("Item", 1:10)
 #'
-#' # Run simulation
-#' cutoff_res <- RMitemInfitCutoff(sim_data, iterations = 100, parallel = FALSE,
-#'                             seed = 42)
+#'   # Run simulation
+#'   cutoff_res <- RMitemInfitCutoff(sim_data, iterations = 100,
+#'                                   parallel = FALSE, seed = 42)
 #'
-#' # Simulated distribution only (infit + outfit faceted)
-#' RMitemInfitCutoffPlot(cutoff_res)
+#'   # Simulated distribution only (infit + outfit faceted)
+#'   RMitemInfitPlot(cutoff_res)
 #'
-#' # With observed fit overlaid (infit only, the default)
-#' RMitemInfitCutoffPlot(cutoff_res, data = sim_data)
+#'   # With observed fit overlaid (infit only, the default)
+#'   RMitemInfitPlot(cutoff_res, data = sim_data)
 #'
-#' # Both infit and outfit panels side by side
-#' RMitemInfitCutoffPlot(cutoff_res, data = sim_data, output = "both")
+#'   # Both infit and outfit panels side by side
+#'   if (requireNamespace("patchwork", quietly = TRUE)) {
+#'     RMitemInfitPlot(cutoff_res, data = sim_data, statistic = "both")
+#'   }
 #' }
-RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
-
+#' }
+RMitemInfitPlot <- function(simfit, data, statistic = "infit") {
   # --- Check required packages ------------------------------------------------
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop(
-      "Package 'ggplot2' is required for RMitemInfitCutoffPlot() but is not installed.\n",
+      "Package 'ggplot2' is required for RMitemInfitPlot() but is not installed.\n",
       "Install it with: install.packages(\"ggplot2\")",
       call. = FALSE
     )
   }
   if (!requireNamespace("ggdist", quietly = TRUE)) {
     stop(
-      "Package 'ggdist' is required for RMitemInfitCutoffPlot() but is not installed.\n",
+      "Package 'ggdist' is required for RMitemInfitPlot() but is not installed.\n",
       "Install it with: install.packages(\"ggdist\")",
       call. = FALSE
     )
   }
 
-  output <- match.arg(output, c("infit", "outfit", "both"))
+  statistic <- match.arg(statistic, c("infit", "outfit", "both"))
 
   # --- Validate simfit --------------------------------------------------------
-  required_names <- c("results", "item_cutoffs", "actual_iterations",
-                      "sample_n", "item_names")
+  required_names <- c(
+    "results",
+    "item_cutoffs",
+    "actual_iterations",
+    "sample_n",
+    "item_names"
+  )
   missing_names <- setdiff(required_names, names(simfit))
   if (length(missing_names) > 0L) {
     stop(
@@ -104,50 +115,61 @@ RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
     )
   }
 
-  results_df       <- simfit$results
-  item_cutoffs     <- simfit$item_cutoffs
+  results_df <- simfit$results
+  item_cutoffs <- simfit$item_cutoffs
   actual_iterations <- simfit$actual_iterations
-  sample_n         <- simfit$sample_n
-  item_names       <- simfit$item_names
+  sample_n <- simfit$sample_n
+  item_names <- simfit$item_names
+
+  # Standard sample-size clause for the (complete-case) simulation sample.
+  # `sample_n_total` / `sample_has_na` are absent in cutoff objects made by
+  # older versions, so fall back to the plain count.
+  sample_clause <- .n_caption(
+    sample_n,
+    if (is.null(simfit$sample_n_total)) sample_n else simfit$sample_n_total,
+    if (isTRUE(simfit$sample_has_na)) "complete cases" else character()
+  )
 
   # Item factor levels (reversed for plotting top-to-bottom)
   item_levels <- rev(item_names)
 
   # --- Compute per-item summary intervals for segment overlays ----------------
-  lo_hi <- do.call(rbind, lapply(item_names, function(item) {
-    sub <- results_df[results_df$Item == item, ]
-    data.frame(
-      Item              = item,
-      min_infit_msq     = stats::quantile(sub$InfitMSQ,  0.001, na.rm = TRUE),
-      max_infit_msq     = stats::quantile(sub$InfitMSQ,  0.999, na.rm = TRUE),
-      p66lo_infit_msq   = stats::quantile(sub$InfitMSQ,  0.167, na.rm = TRUE),
-      p66hi_infit_msq   = stats::quantile(sub$InfitMSQ,  0.833, na.rm = TRUE),
-      median_infit      = stats::median(sub$InfitMSQ, na.rm = TRUE),
-      min_outfit_msq    = stats::quantile(sub$OutfitMSQ, 0.001, na.rm = TRUE),
-      max_outfit_msq    = stats::quantile(sub$OutfitMSQ, 0.999, na.rm = TRUE),
-      p66lo_outfit_msq  = stats::quantile(sub$OutfitMSQ, 0.167, na.rm = TRUE),
-      p66hi_outfit_msq  = stats::quantile(sub$OutfitMSQ, 0.833, na.rm = TRUE),
-      median_outfit     = stats::median(sub$OutfitMSQ, na.rm = TRUE),
-      stringsAsFactors  = FALSE,
-      row.names         = NULL
-    )
-  }))
+  lo_hi <- do.call(
+    rbind,
+    lapply(item_names, function(item) {
+      sub <- results_df[results_df$Item == item, ]
+      data.frame(
+        Item = item,
+        min_infit_msq = stats::quantile(sub$InfitMSQ, 0.001, na.rm = TRUE),
+        max_infit_msq = stats::quantile(sub$InfitMSQ, 0.999, na.rm = TRUE),
+        p66lo_infit_msq = stats::quantile(sub$InfitMSQ, 0.167, na.rm = TRUE),
+        p66hi_infit_msq = stats::quantile(sub$InfitMSQ, 0.833, na.rm = TRUE),
+        median_infit = stats::median(sub$InfitMSQ, na.rm = TRUE),
+        min_outfit_msq = stats::quantile(sub$OutfitMSQ, 0.001, na.rm = TRUE),
+        max_outfit_msq = stats::quantile(sub$OutfitMSQ, 0.999, na.rm = TRUE),
+        p66lo_outfit_msq = stats::quantile(sub$OutfitMSQ, 0.167, na.rm = TRUE),
+        p66hi_outfit_msq = stats::quantile(sub$OutfitMSQ, 0.833, na.rm = TRUE),
+        median_outfit = stats::median(sub$OutfitMSQ, na.rm = TRUE),
+        stringsAsFactors = FALSE,
+        row.names = NULL
+      )
+    })
+  )
   rownames(lo_hi) <- NULL
 
   # --- Case 1: no observed data, show simulation distribution only ------------
   if (missing(data)) {
-
     # Pivot results to long format
     infit_long <- data.frame(
-      Item      = results_df$Item,
+      Item = results_df$Item,
       statistic = "InfitMSQ",
-      Value     = results_df$InfitMSQ,
+      Value = results_df$InfitMSQ,
       stringsAsFactors = FALSE
     )
     outfit_long <- data.frame(
-      Item      = results_df$Item,
+      Item = results_df$Item,
       statistic = "OutfitMSQ",
-      Value     = results_df$OutfitMSQ,
+      Value = results_df$OutfitMSQ,
       stringsAsFactors = FALSE
     )
     results_long <- rbind(infit_long, outfit_long)
@@ -172,8 +194,11 @@ RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
         x = "Conditional MSQ",
         y = "Item",
         caption = er2_caption(paste0(
-          "Results from ", actual_iterations,
-          " simulated datasets with ", sample_n, " respondents."
+          "Results from ",
+          actual_iterations,
+          " simulated datasets. ",
+          sample_clause,
+          " per dataset."
         ))
       ) +
       ggplot2::scale_color_manual(
@@ -202,46 +227,48 @@ RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
       call. = FALSE
     )
   }
-
   validate_response_data(data)
-
-  data_mat <- as.matrix(data)
-
-  if (max(data_mat, na.rm = TRUE) == 1L) {
-    erm_out <- eRm::RM(data)
-  } else {
-    erm_out <- eRm::PCM(data)
-  }
 
   # rgl workaround
   old_rgl <- getOption("rgl.useNULL")
   options(rgl.useNULL = TRUE)
   on.exit(options(rgl.useNULL = old_rgl), add = TRUE)
 
-  cfit <- iarm::out_infit(erm_out)
+  # CML fit via psychotools (a dichotomous item is a 2-category PCM);
+  # iarm::out_infit() accepts pcmodel objects and matches the former
+  # eRm::RM()/PCM() route to ~1e-6 (same pairing as RMitemInfitCutoff()).
+  model_fit <- psychotools::pcmodel(data)
+  cfit <- iarm::out_infit(model_fit)
 
   observed_df <- data.frame(
-    Item      = names(data),
-    observed_infit  = cfit$Infit,
+    Item = names(data),
+    observed_infit = cfit$Infit,
     observed_outfit = cfit$Outfit,
     stringsAsFactors = FALSE
   )
 
   # --- Build infit data -------------------------------------------------------
   infit_sim <- data.frame(
-    Item      = results_df$Item,
-    Value     = results_df$InfitMSQ,
+    Item = results_df$Item,
+    Value = results_df$InfitMSQ,
     stringsAsFactors = FALSE
   )
-  infit_sim <- merge(infit_sim, observed_df[, c("Item", "observed_infit")],
-                     by = "Item", sort = FALSE)
+  infit_sim <- merge(
+    infit_sim,
+    observed_df[, c("Item", "observed_infit")],
+    by = "Item",
+    sort = FALSE
+  )
   infit_sim$Item <- factor(infit_sim$Item, levels = item_levels)
 
   lo_hi$Item_f <- factor(lo_hi$Item, levels = item_levels)
 
   caption_text <- er2_caption(paste0(
-    "Results from ", actual_iterations,
-    " simulated datasets with ", sample_n, " respondents.\n",
+    "Results from ",
+    actual_iterations,
+    " simulated datasets. ",
+    sample_clause,
+    " per dataset.\n",
     "Orange dots indicate observed conditional item fit. ",
     "Black dots indicate median fit from simulations."
   ))
@@ -311,16 +338,22 @@ RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
       minor_breaks = NULL
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(panel.spacing = ggplot2::unit(0.7, "cm"))
+    ggplot2::theme(panel.spacing = ggplot2::unit(0.7, "cm")) +
+    er2_axis_margins() +
+    er2_plot_caption()
 
   # --- Build outfit data ------------------------------------------------------
   outfit_sim <- data.frame(
-    Item      = results_df$Item,
-    Value     = results_df$OutfitMSQ,
+    Item = results_df$Item,
+    Value = results_df$OutfitMSQ,
     stringsAsFactors = FALSE
   )
-  outfit_sim <- merge(outfit_sim, observed_df[, c("Item", "observed_outfit")],
-                      by = "Item", sort = FALSE)
+  outfit_sim <- merge(
+    outfit_sim,
+    observed_df[, c("Item", "observed_outfit")],
+    by = "Item",
+    sort = FALSE
+  )
   outfit_sim$Item <- factor(outfit_sim$Item, levels = item_levels)
 
   outfit_p <- ggplot2::ggplot(
@@ -389,19 +422,21 @@ RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
       minor_breaks = NULL
     ) +
     ggplot2::theme_minimal() +
-    ggplot2::theme(panel.spacing = ggplot2::unit(0.7, "cm"))
+    ggplot2::theme(panel.spacing = ggplot2::unit(0.7, "cm")) +
+    er2_axis_margins() +
+    er2_plot_caption()
 
   # --- Return the requested panel(s) ------------------------------------------
-  if (output == "both") {
+  if (statistic == "both") {
     if (!requireNamespace("patchwork", quietly = TRUE)) {
       stop(
-        "Package 'patchwork' is required for output = \"both\" but is not installed.\n",
+        "Package 'patchwork' is required for statistic = \"both\" but is not installed.\n",
         "Install it with: install.packages(\"patchwork\")",
         call. = FALSE
       )
     }
     return(infit_p + outfit_p)
-  } else if (output == "outfit") {
+  } else if (statistic == "outfit") {
     return(outfit_p)
   } else {
     # default: infit only, add caption to infit panel
@@ -409,4 +444,16 @@ RMitemInfitCutoffPlot <- function(simfit, data, output = "infit") {
       ggplot2::labs(caption = caption_text)
     return(infit_p)
   }
+}
+
+#' @rdname RMitemInfitPlot
+#' @param ... Arguments passed on to \code{RMitemInfitPlot()}.
+#' @details
+#' `RMitemInfitCutoffPlot()` is a deprecated alias for `RMitemInfitPlot()`,
+#' retained for backward compatibility with code written against easyRasch2
+#' 0.8.0. It warns and forwards to `RMitemInfitPlot()`.
+#' @export
+RMitemInfitCutoffPlot <- function(...) {
+  .Deprecated("RMitemInfitPlot")
+  RMitemInfitPlot(...)
 }

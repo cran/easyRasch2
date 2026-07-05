@@ -21,7 +21,9 @@ kable caption.
 \item The \verb{$item_cutoffs} data.frame directly: must have columns \code{Item},
 \code{infit_low}, and \code{infit_high}.
 When provided, adds columns \code{Infit_low}, \code{Infit_high}, and \code{Flagged} to
-the result.
+the result. \code{Flagged} is a character column labelling the misfit
+direction: \code{"overfit"} (pooled infit below the range), \code{"underfit"}
+(above), or \code{""} (within range).
 }}
 
 \item{output}{Character string controlling the return value. Either
@@ -42,6 +44,8 @@ complete cases. When \code{cutoff} is provided, columns "Infit low",
 \code{Infit_MSQ}, \code{Infit_SE}, and \code{Relative_location}. When \code{cutoff} is
 provided, columns \code{Infit_low}, \code{Infit_high}, and \code{Flagged} are also
 included (inserted after \code{Infit_SE}, before \code{Relative_location}).
+\code{Flagged} is a character column (\code{"overfit"} / \code{"underfit"} / \code{""}),
+not the previous logical.
 }
 }
 \description{
@@ -52,11 +56,13 @@ imputed dataset and pools the results using Rubin's rules.
 \details{
 For each of the \code{m} imputed datasets, the function:
 \enumerate{
-\item Fits a Rasch model (\code{eRm::RM()} for dichotomous data or
-\code{eRm::PCM()} for polytomous data).
+\item Fits a Rasch model by CML via \code{psychotools::pcmodel()} (a
+dichotomous item is a 2-category partial credit model), consistent with
+\code{\link{RMitemInfit}} and the rest of the package.
 \item Computes conditional infit MSQ and its standard error via
 \code{iarm::out_infit()}.
-\item Computes item and person locations.
+\item Computes item locations (mean of the grand-mean-centred CML
+Andrich thresholds) and the mean WLE person location.
 }
 
 The per-imputation estimates are then pooled using Rubin's rules:
@@ -73,6 +79,15 @@ estimates.}
 Relative item location is the mean of per-imputation relative locations
 (item location minus sample mean person location).
 
+\strong{Caveat on the pooled SE.} The within-imputation variance is the
+squared conditional infit SE from \code{iarm::out_infit()}. Müller (2020) showed
+that this asymptotic SE is an unreliable measure of uncertainty for the
+conditional infit statistic; Rubin's pooled SE inherits that limitation, so
+the \code{Infit_SE}/\verb{Infit SE} column should be read as an approximate indication
+of imputation-related variability rather than a trustworthy inferential
+standard error. For item misfit decisions, prefer the simulation-based
+cutoffs from \code{\link{RMitemInfitCutoffMI}}.
+
 Imputed datasets that cause model convergence failures are dropped with a
 warning. If all imputations fail, the function stops with an error. At
 least two successful imputations are required to estimate between-imputation
@@ -83,14 +98,20 @@ Imports).
 }
 \examples{
 \donttest{
-if (requireNamespace("mice", quietly = TRUE)) {
-  # Create example data with missing values
+if (requireNamespace("mice", quietly = TRUE) &&
+    requireNamespace("iarm", quietly = TRUE) &&
+    requireNamespace("ggdist", quietly = TRUE)) {
+  # Create example data with ~10\% MCAR missingness
   set.seed(42)
-  sim_data <- as.data.frame(
-    matrix(sample(0:1, 200 * 8, replace = TRUE), nrow = 200, ncol = 8)
-  )
+  mat <- matrix(sample(0:1, 200 * 8, replace = TRUE), nrow = 200, ncol = 8)
+  mat[sample(length(mat), round(0.10 * length(mat)))] <- NA
+  sim_data <- as.data.frame(mat)
   colnames(sim_data) <- paste0("Item", 1:8)
-  sim_data[sample(length(sim_data), 0.10 * length(sim_data))] <- NA
+
+  # mice's ordinal method (`polr`) requires the items to be ordered
+  # factors, so code them as such before imputing. RMitemInfitMI()
+  # converts the completed factors back to numeric internally.
+  sim_data[] <- lapply(sim_data, function(x) factor(x, ordered = TRUE))
 
   # Impute (use more imputations, e.g. m = 5+, in real analyses)
   imp <- mice::mice(sim_data, m = 2, method = "polr", seed = 123,
@@ -109,6 +130,11 @@ if (requireNamespace("mice", quietly = TRUE)) {
   df <- RMitemInfitMI(imp, cutoff = cutoff_mi, output = "dataframe")
 }
 }
+}
+\references{
+Müller, M. (2020). Item fit statistics for Rasch analysis: Can we trust
+them? \emph{Journal of Statistical Distributions and Applications}, 7(5).
+\doi{10.1186/s40488-020-00108-7}
 }
 \seealso{
 \code{\link{RMitemInfit}}, \code{\link{RMitemInfitCutoffMI}}
