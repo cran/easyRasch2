@@ -282,6 +282,12 @@ RMreliability <- function(
     stop("No complete cases in `data`.", call. = FALSE)
   }
 
+  # Respondents with no responses at all contribute nothing and break the CML
+  # fit behind the PSI (psychotools errors on all-NA rows); drop them, keeping
+  # the raw total for the caption.
+  n_total <- nrow(as.data.frame(data))
+  data <- .drop_empty_respondents(data)
+
   data_mat <- as.matrix(data)
   is_polytomous <- max(data_mat, na.rm = TRUE) > 1L
   n_persons <- nrow(data)
@@ -322,6 +328,15 @@ RMreliability <- function(
     verbose = FALSE
   )
   rmu_input <- do.call(cbind, lapply(pvs, as.numeric))
+
+  # mirt's MH plausible-value sampler leaves the R RNG in a nondeterministic
+  # state even under set.seed() (the draws themselves are reproducible, the
+  # stream advancement is not), so the RMU column splits below would differ
+  # between identical calls. Re-seed to make the whole result reproducible;
+  # + 2L keeps the stream distinct from the bootstrap's seed + 1L.
+  if (!is.null(seed)) {
+    set.seed(seed + 2L)
+  }
 
   rmu_iter_results <- do.call(
     rbind,
@@ -444,9 +459,9 @@ RMreliability <- function(
       "Marginal",
       paste0("RMU (", estim, ")")
     ),
-    estimate = round(c(alpha, psi, marg_rel, rmu_summary$estimate), 3),
-    lower = round(c(alpha_lower, psi_lower, marg_lower, rmu_summary$lower), 3),
-    upper = round(c(alpha_upper, psi_upper, marg_upper, rmu_summary$upper), 3),
+    estimate = c(alpha, psi, marg_rel, rmu_summary$estimate),
+    lower = c(alpha_lower, psi_lower, marg_lower, rmu_summary$lower),
+    upper = c(alpha_upper, psi_upper, marg_upper, rmu_summary$upper),
     notes = c(boot_note, boot_note, boot_note, rmu_note),
     stringsAsFactors = FALSE,
     row.names = NULL
@@ -455,6 +470,9 @@ RMreliability <- function(
   if (output == "dataframe") {
     return(result_df)
   }
+
+  # Kable display rounding (the dataframe output above stays unrounded)
+  result_df <- .round_display(result_df, c(estimate = 3, lower = 3, upper = 3))
 
   knitr::kable(
     result_df,
@@ -469,8 +487,8 @@ RMreliability <- function(
     caption = paste0(
       "Reliability for ",
       n_items,
-      " items, n = ",
-      n_persons,
+      " items, ",
+      .n_caption(n_persons, n_total),
       ". PSI is the WLE-based separation reliability and excludes min/max ",
       "scoring respondents."
     )

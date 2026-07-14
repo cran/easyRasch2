@@ -159,3 +159,31 @@ test_that("RMUreliability prints input summary when verbose = TRUE", {
   m <- matrix(rnorm(60 * 4), nrow = 60, ncol = 4)
   expect_message(RMUreliability(m, verbose = TRUE), regexp = "Subjects")
 })
+
+test_that("RMreliability drops all-NA respondents instead of erroring", {
+  skip_if_not_installed("ggdist")
+  set.seed(42)
+  df <- as.data.frame(matrix(sample(0:2, 60 * 6, replace = TRUE), nrow = 60))
+  colnames(df) <- paste0("i", 1:6)
+  df[3, ] <- NA
+
+  expect_message(k <- RMreliability(df), "no responses dropped")
+  expect_match(paste(as.character(k), collapse = "\n"),
+               "n = 59 of 60 respondents")
+})
+
+test_that("RMreliability is reproducible with the same seed (incl. RMU)", {
+  skip_if_not_installed("ggdist")
+  # Regression: mirt's MH plausible-value sampler leaves the R RNG in a
+  # nondeterministic state, so without the internal re-seed the RMU column
+  # splits differed between identical calls.
+  df <- make_dichotomous(n = 120, k = 6)
+  r1 <- suppressWarnings(RMreliability(df, draws = 100, rmu_iter = 5,
+                                       parallel = FALSE, seed = 42L,
+                                       output = "dataframe"))
+  r2 <- suppressWarnings(RMreliability(df, draws = 100, rmu_iter = 5,
+                                       parallel = FALSE, seed = 42L,
+                                       output = "dataframe"))
+  expect_identical(r1$estimate, r2$estimate)
+  expect_identical(r1$lower, r2$lower)
+})

@@ -67,8 +67,9 @@
 #'   `result$direction2` if needed.
 #' * If `output = "dataframe"`: a named list of two data.frames
 #'   (`$direction1`, `$direction2`) with columns `Item1`, `Item2`,
-#'   `gamma`, `padj_bh`, `Significance`. When `cutoff` is provided,
-#'   columns `gamma_low`, `gamma_high`, and `flagged` are also included.
+#'   `gamma`, `se`, `lower`, `upper` (95% Wald CI), `padj_bh`,
+#'   `Significance`. When `cutoff` is provided, columns `gamma_low`,
+#'   `gamma_high`, and `flagged` are also included.
 #'   With `p_value = TRUE`, `padj_bh` and `Significance` are replaced by
 #'   `p_gamma` and `padj_gamma` (identical for a pair in both directions).
 #'
@@ -269,8 +270,11 @@ RMlocdepGamma <- function(
     df <- data.frame(
       Item1 = as.character(raw_df$Item1),
       Item2 = as.character(raw_df$Item2),
-      gamma = round(as.numeric(raw_df$gamma), 3),
-      padj_bh = round(as.numeric(raw_df[[6]]), 3),
+      gamma = as.numeric(raw_df$gamma),
+      se = as.numeric(raw_df$se),
+      lower = as.numeric(raw_df$lower),
+      upper = as.numeric(raw_df$upper),
+      padj_bh = as.numeric(raw_df[[6]]),
       Significance = trimws(as.character(raw_df[[7]])),
       stringsAsFactors = FALSE
     )
@@ -314,8 +318,6 @@ RMlocdepGamma <- function(
       # Restore original row order
       merged <- merged[match(result_df$canonical_key, merged$canonical_key), ]
       rownames(merged) <- NULL
-      merged$gamma_low <- round(merged$gamma_low, 3)
-      merged$gamma_high <- round(merged$gamma_high, 3)
       merged$flagged <- !is.na(merged$gamma_low) &
         (merged$gamma < merged$gamma_low | merged$gamma > merged$gamma_high)
 
@@ -326,6 +328,9 @@ RMlocdepGamma <- function(
         "Item1",
         "Item2",
         "gamma",
+        "se",
+        "lower",
+        "upper",
         "padj_bh",
         "Significance",
         "gamma_low",
@@ -377,8 +382,8 @@ RMlocdepGamma <- function(
       correction = correction,
       tail = "upper"
     )
-    p_lookup <- stats::setNames(round(pv$p, 4), pv$name)
-    padj_lookup <- stats::setNames(round(pv$padj, 4), pv$name)
+    p_lookup <- stats::setNames(pv$p, pv$name)
+    padj_lookup <- stats::setNames(pv$padj, pv$name)
 
     for (idx in seq_along(result_list)) {
       df <- result_list[[idx]]
@@ -391,6 +396,9 @@ RMlocdepGamma <- function(
         "Item1",
         "Item2",
         "gamma",
+        "se",
+        "lower",
+        "upper",
         "gamma_low",
         "gamma_high",
         "p_gamma",
@@ -422,6 +430,19 @@ RMlocdepGamma <- function(
   if (output == "dataframe") {
     return(result_list)
   }
+
+  # Kable display rounding (the dataframe output above stays unrounded).
+  # The se / lower / upper columns are dataframe-only (added for
+  # programmatic use, e.g. the jamovi module); the kable keeps its
+  # previous column set.
+  ld_digits <- c(
+    gamma = 3, padj_bh = 3, gamma_low = 3, gamma_high = 3,
+    p_gamma = 4, padj_gamma = 4
+  )
+  result_list <- lapply(result_list, function(d) {
+    .round_display(d[, setdiff(names(d), c("se", "lower", "upper")),
+                     drop = FALSE], digits = ld_digits)
+  })
 
   # Build caption
   n_complete <- sum(stats::complete.cases(as.data.frame(data)))
