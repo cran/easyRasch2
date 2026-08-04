@@ -1,10 +1,10 @@
-b2d3d54f44fb9058a7d3562bdfd8914f *DESCRIPTION
+00d542e2eeff14cf216d82c93239386d *DESCRIPTION
 084e0ab79aafc778e55d93fce9d9fa92 *NAMESPACE
-8b6d056836f5afa20f0e4be534d06a56 *NEWS.md
+7cc668e7a2074e4c37f3a42d885d8c56 *NEWS.md
 aa289e5a227dd4584e84e6395c799245 *R/bootstrap_restscore.R
 b77e58a223c67303c9cb1c02dc2c1a3f *R/cfa_cutoff.R
 85dc6736d558c172c68332d42a53620e *R/cicc_plot.R
-ab6c7f39c6e7ec64c89ad6da63b1d612 *R/conditional_infit.R
+b9e532f814724d9d7d72d8a24cbae9b2 *R/conditional_infit.R
 9f4fd8af9235401ebe11014a7a98729a *R/conditional_infit_mi.R
 b8dceb869bace2a3c15d6ceddc4ff14d *R/data.R
 69feed2f99e59419a7f6f4eef33e6d2b *R/data_plots.R
@@ -12,7 +12,7 @@ b8dceb869bace2a3c15d6ceddc4ff14d *R/data.R
 192c674df1174b8ec6c422078dc6153c *R/dif_partgam.R
 dc4afedb987300b2441e909b68c779dd *R/dif_tree.R
 e3f0534654a3ff4cf04828cbadc7ba5b *R/easyRasch2-package.R
-0d142631fe8fd786d18dfc7d193cff70 *R/infit_cutoff.R
+4b66d596b1c7bbe0d201a0f2449e8bc3 *R/infit_cutoff.R
 3f906e40898afce7d4dffe8d7c062ce0 *R/infit_cutoff_mi.R
 c72afd6ab15625e5feaec4afcde8773b *R/infitcutoff_plot.R
 d1f1dc0029c697a56e51d18d3c6e875e *R/item_cat_prob.R
@@ -28,7 +28,7 @@ c24b0e849efd8c819a1ab83347536ed7 *R/martin_lof.R
 cc83cfc73afecbcadb847e07f3892a37 *R/reliability.R
 81416d989f43c65d9bbd75f5ad2b35b3 *R/residual_pca.R
 e3122a4bc95e3978b9c4b93e7cc96263 *R/score_se.R
-d1adc3e1f1e0d294bd9a633a199295cd *R/targeting_plot.R
+45b2ba5ed44634864e82e42dea8e1ca4 *R/targeting_plot.R
 cbb53413ca35c7c8f9648976c7eb7b14 *R/tile_plot.R
 adac52243c43a04ffea15127b9165852 *R/utils-iarm.R
 9bedfbd7166812f35821730aa49af02e *R/utils-multiplicity.R
@@ -37,12 +37,12 @@ d3dfec1170f9078befb17fe69749ff2e *R/utils-theme.R
 fbc2243cddc2e7ff764007d006cec53b *R/utils-theta.R
 1e7634b2cb8f88a7c9882b090b64f8e2 *R/utils-validation.R
 f2eb349d707a6b8072695fe7abdbe76a *R/zzz_renaming.R
-070e58df1cf8a0867de39cfd7d243efc *README.md
+a3de57d4edb24b8c5c1ecd5f6e85e61b *README.md
 21c9401b8c07f38d762ade4612fc4ffe *build/partial.rdb
 fefca671625d0b856eb95b7e2b8b138f *build/vignette.rds
 35f36d480f4fff002cf602a47dfa9d2b *data/phq9.rda
-f7026e768534efbc8cf29a2bc786be6b *inst/doc/easyRasch2.Rmd
-e4bb5e4b4be2dae2dc43fc2bf32b35f9 *inst/doc/easyRasch2.html
+15663b4211d26cdc9e67fb743caa6409 *inst/doc/easyRasch2.Rmd
+883f53ec0794158466a2bc64e5d03d89 *inst/doc/easyRasch2.html
 c51e9a4620de0887bbc1e7dc67eb6ba0 *man/RMUreliability.Rd
 fe3cd2d48f5436e7847a4285ab71259b *man/RMdifGamma.Rd
 252e85f46256d96b198d5ee16e938b85 *man/RMdifGammaCutoff.Rd
@@ -59,8 +59,8 @@ acf45f3b41923da0187d26cfcf9e6361 *man/RMdimMartinLofResiduals.Rd
 4d41929d61b31b62d1eb88598c4b1ea7 *man/RMitemCatProb.Rd
 1f20b2ade704ab52433d34f0944e9a57 *man/RMitemHierarchy.Rd
 da0967d9784a5b00c3939d52971c3993 *man/RMitemICCPlot.Rd
-244c26f2faa81092844f5783a9a6652b *man/RMitemInfit.Rd
-c5f52cf1541def8ed9edcb59d1bc8845 *man/RMitemInfitCutoff.Rd
+1f1d329ac5d6ff9a457d24b6eca92e00 *man/RMitemInfit.Rd
+676005d4699aecaaa081e84eb4626edb *man/RMitemInfitCutoff.Rd
 804464556718f0dd71b6c027b11b2ccb *man/RMitemInfitCutoffMI.Rd
 29b6de57ff1dcd47a0cc2f4f7c28a4a5 *man/RMitemInfitMI.Rd
 516eb1dba3f0933be5b28fd9f980a1b0 *man/RMitemInfitPlot.Rd
@@ -80,7 +80,7 @@ a0023c53bdee9afdd6f32449e07b93b8 *man/RMpersonParameters.Rd
 9d9c50aeb4e2124a5dda5d7fc68787b6 *man/RMplotTile.Rd
 da279ed356f66a197094c8280745c899 *man/RMreliability.Rd
 c9b2b878131f9e24cf279ed7cb68ee0c *man/RMscoreSE.Rd
-be0a6ba6cf14a141a94441e0dc488583 *man/RMtargeting.Rd
+ca4cfb020b26e19c23c8569ca2681d6b *man/RMtargeting.Rd
 bdab540cd9ea155741b6ad46de171ba2 *man/dot-format_cutoff_method_label.Rd
 2b7897fda17156fc63e00e199081debd *man/dot-format_gamma_cutoff_method_label.Rd
 9a77b8f9302f0180026d8a514ff4af3a *man/easyRasch2-package.Rd
@@ -119,7 +119,7 @@ fa062fd7726eb80ca36f8fbfe1a0431f *tests/testthat/test-documentation.R
 085e60235cd5cb2c6a67cd325ab91271 *tests/testthat/test-infit_cutoff.R
 8a630c4523c4f814f61deec3fc781d25 *tests/testthat/test-infit_cutoff_plot.R
 17a8a557a64df94ea00caa9410ab0859 *tests/testthat/test-infit_mi.R
-56e9223630190d920c1d956a55d8e029 *tests/testthat/test-infit_pvalue.R
+57f8f312e51c0883d6eed79c20fea1d8 *tests/testthat/test-infit_pvalue.R
 802d89ffbe179c9487488b13fff88791 *tests/testthat/test-item_cat_prob.R
 eb675f92711a92b7b4be67228604a308 *tests/testthat/test-item_hierarchy.R
 6ffef74df73e753a9ff8fdd07fbbbd02 *tests/testthat/test-item_person_parameters.R
@@ -135,7 +135,7 @@ ae365fea855bd5e20637330b58e407c8 *tests/testthat/test-score_se.R
 1f9cbbdab31c594e452ddd106b7cca3d *tests/testthat/test-simulation-utils.R
 cc7bf75e9ac07ddadb155da75812f8d5 *tests/testthat/test-targeting.R
 09ead567736d4b62f478d17730b5b91a *tests/testthat/test-tile_plot.R
-f7026e768534efbc8cf29a2bc786be6b *vignettes/easyRasch2.Rmd
+15663b4211d26cdc9e67fb743caa6409 *vignettes/easyRasch2.Rmd
 0433c1c1cdad417f22f7dc8c50c72679 *vignettes/easyRasch2.Rmd.orig
 6819ca0c08e0c265af98b990ba5cf72d *vignettes/figures/rasch-bar-plot-1.png
 0bbd90db3d314b9dd08466cb3dc0dc9e *vignettes/figures/rasch-dif-cicc-1.png
@@ -148,7 +148,7 @@ ef90076b57d75851fdfd01dd66da9246 *vignettes/figures/rasch-personfit-1.png
 6c7ec9ba0a70bc468f14485b0cb65cbc *vignettes/figures/rasch-q3-1.png
 dbfc8359bff6d6a4db004d283a272baf *vignettes/figures/rasch-scoreSE-1.png
 989e302269b0f9a4cd1918a93663eece *vignettes/figures/rasch-stackedbar-plot-1.png
-7b8196631dd8e665cd9f1f7969534ceb *vignettes/figures/rasch-targeting-1.png
+ca3905de21cbc2a349ddbfa5c601b7d6 *vignettes/figures/rasch-targeting-1.png
 03d31bba9f8d50edc093dd6fb2cd638a *vignettes/figures/rasch-threshold-hierarchy-1.png
 d5030c9d41ed40676e5d91ece2758281 *vignettes/figures/rasch-tile-plot-1.png
 348d590442dc6cb7f5c7d00ff48fccce *vignettes/references.bib

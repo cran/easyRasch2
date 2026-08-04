@@ -94,7 +94,7 @@ remotes::install_github("pgmj/easyRasch2")
   table and plot share a `$matrix` ($Q_3$ heatmap) / `$pairs` (per-pair
   observed-vs-simulated) structure; optional per-pair bootstrap *p*-values
 - `RMlocdepGamma()` + `RMlocdepGammaCutoff()` + `RMlocdepGammaPlot()` —
-  partial-$\gamma$ local dependence; optional per-pair bootstrap *p*-values
+  partial-γ local dependence; optional per-pair bootstrap *p*-values
 
 ### Dimensionality / unidimensionality
 
@@ -111,9 +111,9 @@ remotes::install_github("pgmj/easyRasch2")
 
 - `RMdifLR()` — Andersen's likelihood-ratio test (`eRm::LRtest`)
 - `RMdifTree()` — Rasch / partial-credit trees (`psychotree`) with
-  Mantel-Haenszel or partial-$\gamma$ effect sizes per split, optional
+  Mantel-Haenszel or partial-γ effect sizes per split, optional
   iterative purification, and `stablelearner`-based stability assessment
-- `RMdifGamma()` + `RMdifGammaCutoff()` + `RMdifGammaPlot()` — partial-$\gamma$
+- `RMdifGamma()` + `RMdifGammaCutoff()` + `RMdifGammaPlot()` — partial-γ
   DIF; optional bootstrap *p*-values calibrated against the simulated Rasch null
 - `RMitemICCPlot()` - evaluates DIF across class intervals
 
@@ -159,7 +159,7 @@ options(mc.cores = 4)
 set.seed(42)
 
 # Conditional item infit with simulation-based cutoffs
-simfit <- RMitemInfitCutoff(pcmdat2, iterations = 250)
+simfit <- RMitemInfitCutoff(pcmdat2, iterations = 400)
 RMitemInfit(pcmdat2, cutoff = simfit)
 
 # Test of unidimensionality via posterior-predictive ordinal CFA
