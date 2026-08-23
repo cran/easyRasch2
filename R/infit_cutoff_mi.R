@@ -19,7 +19,9 @@
 #'   \code{\link{RMitemInfitCutoff}}.
 #' @param verbose Logical. Show progress messages (default `FALSE`).
 #' @param seed Integer or `NULL`. Master random seed for reproducibility. A
-#'   unique per-imputation seed is derived from this value.
+#'   unique per-imputation seed is derived from this value. See
+#'   [easyRasch2-reproducibility] for what this guarantees and how it
+#'   interacts with `parallel`.
 #' @param cutoff_method Character string specifying how cutoff intervals are
 #'   computed from the stacked distribution. Either `"hdci"` (default) for the
 #'   Highest Density Interval via `ggdist::hdci()`, or `"quantile"` for the
@@ -66,6 +68,14 @@
 #' warning. If all imputations fail, the function stops with an error.
 #'
 #' The `mice` package must be installed (it is in Suggests, not Imports).
+#'
+#' @section Interval width under multiple imputation:
+#' `hdci_width` defaults to `0.999` here, not to the `0.95` used by
+#' \code{\link{RMitemInfitCutoff}}. \code{\link{RMitemInfitMI}} has no
+#' corrected-p-value path yet, so under imputation the interval is still the
+#' decision rule and keeps a width chosen for that job. Combining bootstrap
+#' p-values across imputations is planned but needs its own calibration, since
+#' Johansson (2026) covers complete data only.
 #'
 #' @seealso \code{\link{RMitemInfitCutoff}}, \code{\link{RMitemInfitMI}},
 #'   \code{\link{RMitemInfitPlot}}

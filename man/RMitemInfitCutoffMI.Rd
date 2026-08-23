@@ -34,7 +34,9 @@ imputed dataset (default \code{TRUE}). Passed to \code{\link{RMitemInfitCutoff}}
 \item{verbose}{Logical. Show progress messages (default \code{FALSE}).}
 
 \item{seed}{Integer or \code{NULL}. Master random seed for reproducibility. A
-unique per-imputation seed is derived from this value.}
+unique per-imputation seed is derived from this value. See
+\link{easyRasch2-reproducibility} for what this guarantees and how it
+interacts with \code{parallel}.}
 
 \item{cutoff_method}{Character string specifying how cutoff intervals are
 computed from the stacked distribution. Either \code{"hdci"} (default) for the
@@ -92,6 +94,16 @@ warning. If all imputations fail, the function stops with an error.
 
 The \code{mice} package must be installed (it is in Suggests, not Imports).
 }
+\section{Interval width under multiple imputation}{
+
+\code{hdci_width} defaults to \code{0.999} here, not to the \code{0.95} used by
+\code{\link{RMitemInfitCutoff}}. \code{\link{RMitemInfitMI}} has no
+corrected-p-value path yet, so under imputation the interval is still the
+decision rule and keeps a width chosen for that job. Combining bootstrap
+p-values across imputations is planned but needs its own calibration, since
+Johansson (2026) covers complete data only.
+}
+
 \examples{
 \donttest{
 if (requireNamespace("mice", quietly = TRUE) &&

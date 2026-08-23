@@ -86,6 +86,15 @@
 #' them? *Journal of Statistical Distributions and Applications*, 7(5).
 #' \doi{10.1186/s40488-020-00108-7}
 #'
+#' @section Flagging differs from the complete-data function:
+#' \code{\link{RMitemInfit}} flags on the Westfall-Young corrected p-value by
+#' default. This function has no p-value path and flags against the interval,
+#' so the two are not directly comparable. Combining bootstrap p-values across
+#' imputations is planned but needs calibration of its own, since Johansson
+#' (2026) studied complete data. Until then \code{\link{RMitemInfitCutoffMI}}
+#' keeps `hdci_width = 0.999`, a width suited to a decision rule, and the
+#' family-wise error rate of that rule is `1 - 0.999^k` over `k` items.
+#'
 #' @seealso \code{\link{RMitemInfit}}, \code{\link{RMitemInfitCutoffMI}}
 #'
 #' @export
@@ -373,7 +382,7 @@ RMitemInfitMI <- function(mids_object, cutoff = NULL, output = "kable", sort) {
     item_fit_table$infit_low <- NULL
     item_fit_table$infit_high <- NULL
     # Flagged labels the misfit direction: overfit (pooled infit below the
-    # range, more predictable), underfit (above, noisier), "" within range.
+    # range), underfit (above), "" within range.
     item_fit_table$Flagged <- ifelse(
       item_fit_table$Infit_MSQ < item_fit_table$Infit_low,
       "overfit",
@@ -457,8 +466,8 @@ RMitemInfitMI <- function(mids_object, cutoff = NULL, output = "kable", sort) {
   if (!is.null(cutoff)) {
     caption <- paste0(
       caption,
-      " Flagged: overfit = infit below range (more predictable); ",
-      "underfit = above range (noisier)."
+      " Flagged: overfit = infit below range; ",
+      "underfit = above range."
     )
   }
 

@@ -56,9 +56,13 @@ provided only as a familiar cross-person comparability metric and
 are \strong{not} used for inference (see Müller, 2020). Default \code{FALSE}.}
 
 \item{parallel, n_cores}{Logical / integer. Parallelise the resampling
-across persons via \pkg{mirai} when available. Default sequential.}
+across persons via \pkg{mirai} when available. Default sequential.
+When \code{n_cores} is \code{NULL}, \code{getOption("mc.cores")} is used, and two
+workers when that is unset too.}
 
-\item{seed}{Optional integer for reproducible resampling.}
+\item{seed}{Optional integer for reproducible resampling. See
+\link{easyRasch2-reproducibility} for what this guarantees and how it
+interacts with \code{parallel}.}
 
 \item{output}{Character. \code{"kable"} (default), \code{"dataframe"},
 \code{"ggplot"}, or \code{"list"}. For \code{"ggplot"}, a \strong{named list} of

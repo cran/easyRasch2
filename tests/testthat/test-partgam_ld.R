@@ -217,20 +217,45 @@ test_that("RMlocdepGamma rejects malformed cutoff arguments", {
   )
 })
 
-test_that("RMlocdepGamma band flag matches gamma vs bounds in both directions", {
+test_that("RMlocdepGamma band flag is taken on the pair statistic", {
   skip_on_cran()
   skip_if_not_installed("iarm")
   skip_if_not_installed("ggdist")
   df <- make_dichotomous()
   cuts <- RMlocdepGammaCutoff(df, iterations = 10L, parallel = FALSE, seed = 1L)
-  res <- RMlocdepGamma(df, cutoff = cuts, output = "dataframe")
+  # p_value = FALSE pins the interval branch. The default is NULL, which
+  # resolves to TRUE for a full cutoff object.
+  res <- suppressMessages(
+    RMlocdepGamma(df, cutoff = cuts, p_value = FALSE, output = "dataframe")
+  )
   for (dir in res) {
+    # Flagged on gamma_pair, not on the direction's own coefficient. The band
+    # describes the null of the pair maximum, so comparing a single direction
+    # against it would test a statistic the bounds were not computed for.
     expect_equal(
       dir$flagged,
       !is.na(dir$gamma_low) &
-        (dir$gamma < dir$gamma_low | dir$gamma > dir$gamma_high)
+        (dir$gamma_pair < dir$gamma_low | dir$gamma_pair > dir$gamma_high)
     )
   }
+})
+
+test_that("RMlocdepGamma reports the pair statistic as the larger direction", {
+  skip_on_cran()
+  skip_if_not_installed("iarm")
+  df <- make_dichotomous()
+  res <- RMlocdepGamma(df, output = "dataframe")
+  key <- function(x) paste(pmin(x$Item1, x$Item2), pmax(x$Item1, x$Item2))
+  m <- merge(
+    data.frame(k = key(res$direction1), g1 = res$direction1$gamma,
+               gp = res$direction1$gamma_pair),
+    data.frame(k = key(res$direction2), g2 = res$direction2$gamma,
+               gp2 = res$direction2$gamma_pair),
+    by = "k"
+  )
+  expect_equal(m$gp, pmax(m$g1, m$g2))
+  # The same value in both tables, since it belongs to the pair.
+  expect_equal(m$gp, m$gp2)
 })
 
 test_that("RMlocdepGamma handles missing values in data", {
@@ -268,19 +293,23 @@ test_that("RMlocdepGamma p_value adds one-sided p per pair, mirrored across dire
   skip_if_not_installed("ggdist")
   df <- make_dichotomous()
   cuts <- RMlocdepGammaCutoff(df, iterations = 10L, parallel = FALSE, seed = 1L)
-  expect_warning(
+  # Below 400 iterations the advice is a once-per-session message, not a
+  # warning, so that the default path does not warn about its own default.
+  rlang::reset_message_verbosity("easyRasch2_low_iterations_locdep")
+  expect_message(
     res <- RMlocdepGamma(
       df,
       cutoff = cuts,
       p_value = TRUE,
       output = "dataframe"
     ),
-    regexp = "only 10 simulation iterations"
+    regexp = "below the calibrated floor of 400"
   )
   expected_cols <- c(
     "Item1",
     "Item2",
     "gamma",
+    "gamma_pair",
     "se",
     "lower",
     "upper",
@@ -314,11 +343,12 @@ test_that("RMlocdepGamma p_value adds one-sided p per pair, mirrored across dire
   expect_equal(res$direction2$padj_gamma, res$direction1$padj_gamma[m])
   expect_equal(res$direction2$flagged, res$direction1$flagged[m])
 
-  # kable renders with the correction label and canonical-direction note
-  suppressWarnings(kbl <- RMlocdepGamma(df, cutoff = cuts, p_value = TRUE))
+  # kable renders with the correction label and names the tested statistic
+  # by the header the reader sees, not by the internal column name.
+  suppressMessages(kbl <- RMlocdepGamma(df, cutoff = cuts, p_value = TRUE))
   expect_s3_class(kbl, "RMlocdepGamma")
   expect_match(kbl$.combined, "Westfall-Young")
-  expect_match(kbl$.combined, "canonical direction")
+  expect_match(kbl$.combined, "Gamma pair (max)", fixed = TRUE)
 })
 
 test_that("RMlocdepGamma p_value correction runs on the full family before n_pairs", {

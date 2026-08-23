@@ -17,19 +17,23 @@
 #'   When provided, adds columns `Gamma_low`, `Gamma_high`, and `Flagged`
 #'   (logical; `TRUE` when the observed partial gamma falls outside the
 #'   credible range) to the result.
-#' @param p_value Logical. When `TRUE`, adds one-sided bootstrap p-values for
-#'   *excess positive* local dependence (`p_gamma`, `padj_gamma`), matching
-#'   the `p_value` semantics of \code{\link{RMlocdepQ3}}, and `flagged`
-#'   reflects `padj_gamma < alpha` (positive deviations only) instead of the
-#'   credible range. One test per item pair: the p-value is computed in the
-#'   canonical direction (direction 1, rest score = total - Item2, the
-#'   direction that was simulated) and repeated in the direction-2 table for
-#'   the same pair. The asymptotic BH-adjusted p-value and star columns from
-#'   `iarm::partgam_LD()` are **dropped** in this mode; the simulated
+#' @param p_value Logical or `NULL`. When `TRUE`, adds one-sided bootstrap
+#'   p-values for *excess positive* local dependence (`p_gamma`,
+#'   `padj_gamma`), matching the `p_value` semantics of
+#'   \code{\link{RMlocdepQ3}}, and `flagged` reflects `padj_gamma < alpha`
+#'   (positive deviations only) instead of the credible range. One test per
+#'   item pair: the p-value is computed on `gamma_pair`, the larger of the two
+#'   conditioning directions, and repeated in the direction-2 table for the
+#'   same pair. The asymptotic adjusted p-value and star columns from
+#'   `iarm::partgam_LD()` are **dropped** in this mode, and the simulated
 #'   `gamma_low` / `gamma_high` band is kept as the effect-size reference.
-#'   Requires the **full** \code{\link{RMlocdepGammaCutoff}} object as
-#'   `cutoff` (it carries the simulated distributions in `$results`).
-#'   Default `FALSE`.
+#'   `NULL`, the default, means `TRUE` when `cutoff` is the **full**
+#'   \code{\link{RMlocdepGammaCutoff}} object (it carries the simulated
+#'   distributions in `$results`) and `FALSE` otherwise, so calling with no
+#'   cutoff keeps the asymptotic table unchanged. Pass `FALSE` for the
+#'   pre-1.2.0 behaviour. The interval makes a poor decision rule, since its
+#'   width sets a family-wise error rate of `1 - width^m` over all \eqn{m}
+#'   pairs at once (Johansson, 2026).
 #' @param correction Character. Multiplicity correction for the bootstrap
 #'   p-values, applied over the family of all item pairs (before any
 #'   `n_pairs` display filter): `"fwer"` (default; Westfall-Young
@@ -153,7 +157,7 @@
 RMlocdepGamma <- function(
   data,
   cutoff = NULL,
-  p_value = FALSE,
+  p_value = NULL,
   correction = c("fwer", "fdr_bh", "fdr_by", "none"),
   alpha = 0.05,
   output = "kable",
@@ -228,9 +232,29 @@ RMlocdepGamma <- function(
     }
   }
 
-  # --- p-value prerequisites --------------------------------------------------
+  # --- Resolve p_value --------------------------------------------------------
+  # NULL means "use the corrected p-value when the simulations are available".
+  # The interval describes where a pair's coefficient is expected to fall and
+  # makes a poor decision rule, because its width sets a family-wise error rate
+  # over every pair at once (Johansson, 2026). The bare $pair_cutoffs, or no
+  # cutoff at all, leaves nothing to compute a p-value from and resolves to
+  # FALSE, which keeps the asymptotic path this function shows by default
+  # exactly as it was.
+  if (!is.null(p_value) && (!is.logical(p_value) || length(p_value) != 1L)) {
+    stop("`p_value` must be TRUE, FALSE, or NULL.", call. = FALSE)
+  }
+  have_sims <- !is.null(cutoff_full) && !is.null(cutoff_full$results)
+  if (is.null(p_value)) {
+    p_value <- have_sims
+  }
+  n_pairs_total <- if (!is.null(cutoff_full$pair_cutoffs)) {
+    nrow(cutoff_full$pair_cutoffs)
+  } else {
+    NULL
+  }
+
   if (p_value) {
-    if (is.null(cutoff_full) || is.null(cutoff_full$results)) {
+    if (!have_sims) {
       stop(
         "`p_value = TRUE` requires the full RMlocdepGammaCutoff() object (it ",
         "carries the simulated per-pair distributions in $results); a NULL ",
@@ -238,17 +262,34 @@ RMlocdepGamma <- function(
         call. = FALSE
       )
     }
-    if (!is.null(cutoff_n_iter) && cutoff_n_iter < 1000L) {
-      warning(
-        "Bootstrap p-values are based on only ",
+    # Below 400 the correction itself is off. Between 400 and 1000 only
+    # reproducibility improves, which the table caption reports instead.
+    if (!is.null(cutoff_n_iter) && cutoff_n_iter < 400L) {
+      .notify_low_iterations(
         cutoff_n_iter,
-        " simulation iterations. With few iterations the studentised-max ",
-        "(FWER) correction is liberal and small p-values are imprecise; ",
-        "use iterations >= 1000 in RMlocdepGammaCutoff() for reliable ",
-        "p-values.",
-        call. = FALSE
+        cutoff_full$requested_iterations,
+        fn = "RMlocdepGammaCutoff()",
+        id = "easyRasch2_low_iterations_locdep"
       )
     }
+    if (!is.null(n_pairs_total)) {
+      .warn_fdr_floor(
+        cutoff_n_iter,
+        n_pairs_total,
+        correction,
+        alpha,
+        unit = "item pairs",
+        fn = "RMlocdepGammaCutoff()"
+      )
+    }
+  } else if (!is.null(cutoff_full) && !is.null(n_pairs_total)) {
+    .notify_band_flagging(
+      if (identical(cutoff_method, "quantile")) 0.95 else cutoff_hdci_width,
+      n_pairs_total,
+      unit = "item pairs",
+      fn = "RMlocdepGammaCutoff()",
+      id = "easyRasch2_band_flagging_locdep"
+    )
   }
 
   # --- rgl workaround ---------------------------------------------------------
@@ -286,6 +327,29 @@ RMlocdepGamma <- function(
     direction2 = process_pgam_df(pgam_raw[[2]])
   )
 
+  # --- The tested pair statistic ----------------------------------------------
+  # A pair is tested once, on the larger of its two conditioning directions,
+  # because local dependence violates both of the conditional independence
+  # hypotheses the Rasch model implies for it. The `gamma` column of each table
+  # remains that direction's own coefficient, which is what a reader wants to
+  # see, but every decision below is taken on `gamma_pair`, so no p-value or
+  # flag is ever attributed to a coefficient it was not computed from.
+  data_complete <- data[stats::complete.cases(data), , drop = FALSE]
+  .obs1 <- .partgam_ld_gamma(data_complete, direction = 1L)
+  .obs2 <- .partgam_ld_gamma(data_complete, direction = 2L)
+  .pkey <- function(a, b) paste(pmin(a, b), pmax(a, b), sep = "___")
+  gamma_pair <- stats::setNames(
+    pmax(.obs1$gamma,
+         .obs2$gamma[match(.pkey(.obs1$Item1, .obs1$Item2),
+                           .pkey(.obs2$Item1, .obs2$Item2))]),
+    .pkey(.obs1$Item1, .obs1$Item2)
+  )
+  for (idx in seq_along(result_list)) {
+    df <- result_list[[idx]]
+    df$gamma_pair <- as.numeric(gamma_pair[.pkey(df$Item1, df$Item2)])
+    result_list[[idx]] <- df
+  }
+
   # --- Apply cutoff if provided -----------------------------------------------
   # Cutoffs are keyed by direction-1 pairs (i < j), so for direction 2 (i > j)
 
@@ -318,8 +382,10 @@ RMlocdepGamma <- function(
       # Restore original row order
       merged <- merged[match(result_df$canonical_key, merged$canonical_key), ]
       rownames(merged) <- NULL
+      # Flagged on the pair statistic, which is what the cutoff band describes.
       merged$flagged <- !is.na(merged$gamma_low) &
-        (merged$gamma < merged$gamma_low | merged$gamma > merged$gamma_high)
+        (merged$gamma_pair < merged$gamma_low |
+           merged$gamma_pair > merged$gamma_high)
 
       # Remove helper column
       merged$canonical_key <- NULL
@@ -328,6 +394,7 @@ RMlocdepGamma <- function(
         "Item1",
         "Item2",
         "gamma",
+        "gamma_pair",
         "se",
         "lower",
         "upper",
@@ -371,10 +438,9 @@ RMlocdepGamma <- function(
       list(sim_res$iteration, sim_key),
       function(x) x[1L]
     )
-    observed <- stats::setNames(
-      as.numeric(pgam_raw[[1L]]$gamma),
-      obs_key
-    )
+    # The tested statistic is the pair maximum computed above, from the same
+    # code path that produced the simulated null, so the two cannot diverge.
+    observed <- gamma_pair[obs_key]
     # One-sided: excess positive LD (redundancy), matching RMlocdepQ3.
     pv <- .bootstrap_pvalues(
       observed,
@@ -396,6 +462,7 @@ RMlocdepGamma <- function(
         "Item1",
         "Item2",
         "gamma",
+        "gamma_pair",
         "se",
         "lower",
         "upper",
@@ -437,7 +504,7 @@ RMlocdepGamma <- function(
   # previous column set.
   ld_digits <- c(
     gamma = 3, padj_bh = 3, gamma_low = 3, gamma_high = 3,
-    p_gamma = 4, padj_gamma = 4
+    p_gamma = 4, padj_gamma = 4, gamma_pair = 3
   )
   result_list <- lapply(result_list, function(d) {
     .round_display(d[, setdiff(names(d), c("se", "lower", "upper")),
@@ -462,17 +529,20 @@ RMlocdepGamma <- function(
       n_clause,
       ". One-sided bootstrap p-values for excess positive LD from ",
       cutoff_n_iter,
-      " iterations, computed in the canonical direction (rest score = ",
-      "total - Item2) and repeated for both directions (replacing the ",
-      "asymptotic BH p-values); multiplicity correction: ",
+      " iterations, computed on Gamma pair (max), the larger of the pair's ",
+      "two conditioning directions, and repeated across both tables ",
+      "(replacing the asymptotic p-values). Multiplicity correction: ",
       .correction_label(correction),
-      "; flagged at padj < ",
+      ". Flagged at padj < ",
       alpha,
       ". p-values cannot be smaller than 1/(",
       cutoff_n_iter,
       "+1) = ",
       round(1 / (cutoff_n_iter + 1), 4),
-      ".",
+      ". The interval is shown as description and is not the decision rule, ",
+      "so a pair below the lower bound is not flagged.",
+      .iteration_note(cutoff_n_iter),
+      .attrition_clause(cutoff_n_iter, cutoff_full$requested_iterations),
       filter_suffix
     )
   } else if (is.null(cutoff)) {
@@ -497,6 +567,12 @@ RMlocdepGamma <- function(
       } else {
         paste0(iter_part, ".")
       },
+      .band_error_clause(
+        if (identical(cutoff_method, "quantile")) 0.95 else cutoff_hdci_width,
+        total_pairs,
+        unit = "item pairs"
+      ),
+      .attrition_clause(cutoff_n_iter, cutoff_full$requested_iterations),
       filter_suffix
     )
   } else {
@@ -508,17 +584,23 @@ RMlocdepGamma <- function(
     )
   }
 
+  # One header per displayed column, in the order the tables carry them. The
+  # `gamma_pair` column (the larger of the two conditioning directions, and the
+  # statistic that is tested) sits fourth once a cutoff is supplied and last on
+  # the asymptotic path, so the three vectors are not interchangeable.
   col_names_no_cutoff <- c(
     "Item 1",
     "Item 2",
     "Partial gamma",
     "Adj. p-value (BH)",
-    "p-value sign."
+    "p-value sign.",
+    "Gamma pair (max)"
   )
   col_names_cutoff <- c(
     "Item 1",
     "Item 2",
     "Partial gamma",
+    "Gamma pair (max)",
     "Adj. p-value (BH)",
     "p-value sign.",
     "Gamma low",
@@ -529,6 +611,7 @@ RMlocdepGamma <- function(
     "Item 1",
     "Item 2",
     "Partial gamma",
+    "Gamma pair (max)",
     "Gamma low",
     "Gamma high",
     "p",
@@ -632,7 +715,10 @@ knit_print.RMlocdepGamma <- function(x, ...) {
 #' @param data A data.frame or matrix of item responses. Items must be scored
 #'   starting at 0 (non-negative integers). Only complete cases (rows without
 #'   any `NA`) are used.
-#' @param iterations Integer. Number of simulation iterations (default 250).
+#' @param iterations Integer. Number of simulation iterations (default 400,
+#'   was 250 before 1.2.0). 400 is the calibrated floor for the Westfall-Young
+#'   correction (Johansson, 2026) and the count a 95\% interval needs to
+#'   converge. Use 1000 to 2000 for a final analysis.
 #' @param parallel Logical. Use parallel processing via `mirai` if available
 #'   (default `TRUE`).
 #' @param n_cores Integer or `NULL`. Number of parallel workers. When `NULL`,
@@ -640,14 +726,19 @@ knit_print.RMlocdepGamma <- function(x, ...) {
 #'   `parallel = TRUE`, a warning is issued and execution falls back to
 #'   sequential (single core) processing.
 #' @param verbose Logical. Show a progress bar (default `FALSE`).
-#' @param seed Integer or `NULL`. Random seed for reproducibility.
+#' @param seed Integer or `NULL`. Random seed for reproducibility. See
+#'   [easyRasch2-reproducibility] for what this guarantees and how it
+#'   interacts with `parallel`.
 #' @param cutoff_method Character string specifying how cutoff intervals are
 #'   computed. Either `"hdci"` (default) for the Highest Density Interval via
 #'   `ggdist::hdci()`, or `"quantile"` for the 2.5th/97.5th percentiles via
 #'   `stats::quantile()`.
 #' @param hdci_width Numeric. Width of the HDCI when `cutoff_method = "hdci"`.
-#'   Default is `0.99` (99\% HDCI). Ignored when
-#'   `cutoff_method = "quantile"`.
+#'   Default is `0.95` (95\% HDCI), was `0.99` before 1.2.0. The interval
+#'   describes where a fitting pair's coefficient is expected to fall and is
+#'   no longer the default decision rule, so the width is chosen to converge
+#'   at the default iteration count rather than to imply an error rate.
+#'   Ignored when `cutoff_method = "quantile"`.
 #'
 #' @return A list with components:
 #' \describe{
@@ -681,8 +772,12 @@ knit_print.RMlocdepGamma <- function(x, ...) {
 #'   \item Simulates item response data under a Rasch model (dichotomous via
 #'     `psychotools::rrm()` or polytomous via an internal partial credit
 #'     simulator).
-#'   \item Computes partial gamma LD statistics via
-#'     `iarm::partgam_LD()`.
+#'   \item Computes partial gamma for every item pair in the canonical
+#'     rest-score direction. The coefficients are identical to those of
+#'     `iarm::partgam_LD()`, but are computed by a vectorised internal, since
+#'     `iarm` also derives the asymptotic standard error and confidence
+#'     interval that a simulated null does not need and costs roughly two
+#'     orders of magnitude more per iteration.
 #' }
 #'
 #' Because the data are simulated under the Rasch model, items are locally
@@ -731,13 +826,13 @@ knit_print.RMlocdepGamma <- function(x, ...) {
 #' }
 RMlocdepGammaCutoff <- function(
   data,
-  iterations = 250,
+  iterations = 400,
   parallel = TRUE,
   n_cores = NULL,
   verbose = FALSE,
   seed = NULL,
   cutoff_method = "hdci",
-  hdci_width = 0.99
+  hdci_width = 0.95
 ) {
   cutoff_method <- match.arg(cutoff_method, c("hdci", "quantile"))
 
@@ -924,6 +1019,7 @@ RMlocdepGammaCutoff <- function(
     results = results_df,
     pair_cutoffs = pair_cutoffs,
     actual_iterations = actual_iterations,
+    requested_iterations = iterations,
     sample_n = sample_n,
     sample_n_total = n_total,
     sample_has_na = has_na,
@@ -931,6 +1027,249 @@ RMlocdepGammaCutoff <- function(
     item_names = item_names_vec,
     cutoff_method = cutoff_method,
     hdci_width = hdci_width
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Internal: vectorised partial gamma
+# ---------------------------------------------------------------------------
+
+#' Partial gamma for every item pair, coefficient only
+#'
+#' Vectorised implementation of Davis's (1967) partial gamma. It returns the
+#' coefficient and nothing else, which is all a parametric bootstrap needs.
+#' `iarm::partgam_LD()` additionally computes the Goodman-Kruskal delta-method
+#' variance and loops over pairs, cells and strata in R, costing roughly 300 ms
+#' per call irrespective of sample size, so calling it once per bootstrap
+#' iteration dominates everything else by an order of magnitude.
+#'
+#' Used for the simulated null in [RMlocdepGammaCutoff()] and for the observed
+#' statistic that [RMlocdepGamma()] tests against it, so that the two cannot
+#' diverge. The `gamma`, `se`, `lower` and `upper` columns shown to users still
+#' come from `iarm::partgam_LD()`. Agreement with `iarm` is exact and is
+#' asserted in `tests/testthat/test-ld_partgam_gamma.R`.
+#'
+#' @details
+#' Partial gamma pools concordant and discordant pair counts over strata of the
+#' conditioning variable, here the rest score:
+#' \deqn{\gamma = \frac{\sum_k C_k - \sum_k D_k}{\sum_k C_k + \sum_k D_k}.}
+#' For a stratum with an \eqn{m \times m} count matrix \eqn{N} and \eqn{G} the
+#' strictly-upper indicator (\eqn{G_{ab} = 1} iff \eqn{b > a}), writing
+#' \eqn{A = GN} gives \eqn{A_{ij'} = \sum_{i' > i} N_{i'j'}}, and then
+#' \eqn{C = A G^{T}} sums over \eqn{j' > j} while \eqn{D = A G} sums over
+#' \eqn{j' < j}. Each unordered observation pair is counted once, so the
+#' halving `iarm` applies is not needed here.
+#'
+#' @param data data.frame or matrix of item responses scored from 0, with no
+#'   missing values. `iarm::partgam_LD()` applies `complete.cases()` internally;
+#'   this function does not, so the caller must filter first.
+#' @param direction `1` enumerates pairs with `Item1` before `Item2` in column
+#'   order, `2` the reverse. The rest score always excludes `Item2`, so the two
+#'   directions give the two conditional independence hypotheses of Kreiner and
+#'   Christensen (2004). Direction 1 is the canonical one stored by
+#'   [RMlocdepGammaCutoff()].
+#' @param strata When `TRUE`, adds the stratum sign-homogeneity columns
+#'   described in `.partgam_strata_summary()`. Off by default, since the
+#'   bootstrap needs the coefficient alone and calls this once per iteration.
+#' @return data.frame with `Item1`, `Item2` and `gamma`, one row per pair, in
+#'   the same order as `iarm::partgam_LD()[[direction]]`. `gamma` is `NA_real_`
+#'   for a pair with no concordant and no discordant observations, which
+#'   `iarm::partgam_LD()` cannot return at all because it errors on the whole
+#'   data set when an item is constant. With `strata = TRUE` the columns
+#'   `n_strata`, `n_pos`, `n_neg`, `n_zero`, `homogeneous` and `w_opposing` are
+#'   appended, and the per-stratum detail behind them is attached as the
+#'   `"strata"` attribute, a list with one element per pair.
+#' @keywords internal
+#' @noRd
+.partgam_ld_gamma <- function(data, direction = 1L, strata = FALSE) {
+  X <- as.matrix(data)
+  storage.mode(X) <- "integer"
+
+  if (ncol(X) < 2L) {
+    stop("`data` must have at least two items.", call. = FALSE)
+  }
+  if (anyNA(X)) {
+    stop(
+      "`data` must not contain missing values; filter to complete cases first.",
+      call. = FALSE
+    )
+  }
+
+  items <- colnames(X)
+  if (is.null(items)) {
+    items <- paste0("V", seq_len(ncol(X)))
+  }
+  k <- ncol(X)
+  m <- max(X) + 1L
+  score <- rowSums(X)
+
+  # G[a, b] = 1 iff b > a. Its transpose is the strictly-lower counterpart.
+  G <- outer(seq_len(m), seq_len(m), function(a, b) as.numeric(b > a))
+  tG <- t(G)
+
+  # iarm enumerates with i in the outer loop and j in the inner one, sending
+  # i < j to the first table and i > j to the second. Reproduced here so the
+  # row order matches.
+  pairs <- do.call(
+    rbind,
+    lapply(seq_len(k), function(i) {
+      js <- if (direction == 1L) {
+        seq_len(k)[seq_len(k) > i]
+      } else {
+        seq_len(k)[seq_len(k) < i]
+      }
+      if (length(js) == 0L) NULL else cbind(i = i, j = js)
+    })
+  )
+
+  if (!strata) {
+    gammas <- vapply(
+      seq_len(nrow(pairs)),
+      function(p) {
+        i <- pairs[p, "i"]
+        j <- pairs[p, "j"]
+        .partgam_one(X[, i], X[, j], score - X[, j], m, G, tG)
+      },
+      numeric(1L)
+    )
+    return(data.frame(
+      Item1 = items[pairs[, "i"]],
+      Item2 = items[pairs[, "j"]],
+      gamma = gammas,
+      stringsAsFactors = FALSE,
+      row.names = NULL
+    ))
+  }
+
+  detail <- lapply(seq_len(nrow(pairs)), function(p) {
+    i <- pairs[p, "i"]
+    j <- pairs[p, "j"]
+    .partgam_one(X[, i], X[, j], score - X[, j], m, G, tG, strata = TRUE)
+  })
+
+  out <- data.frame(
+    Item1 = items[pairs[, "i"]],
+    Item2 = items[pairs[, "j"]],
+    gamma = vapply(detail, function(d) d$gamma, numeric(1L)),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+  out <- cbind(out, do.call(rbind, lapply(detail, .partgam_strata_summary)))
+  attr(out, "strata") <- detail
+  out
+}
+
+#' Partial gamma for one item pair
+#'
+#' @param x,y Integer response vectors scored from 0.
+#' @param z Integer conditioning variable (the rest score).
+#' @param m Number of response categories spanning `x` and `y`.
+#' @param G,tG The strictly-upper indicator matrix and its transpose.
+#' @param strata When `FALSE` (default) the coefficient is returned on its own,
+#'   which is the path the bootstrap takes. When `TRUE` the stratum-level
+#'   quantities behind it are returned as well.
+#' @return With `strata = FALSE`, the partial gamma coefficient, or `NA_real_`
+#'   when no pair of observations within a stratum is either concordant or
+#'   discordant. With `strata = TRUE`, a list with that value as `gamma` plus
+#'   `gamma_k` (per-stratum gamma, `NA_real_` where a stratum yields no
+#'   concordant or discordant pair), `weight_k` (that stratum's contribution to
+#'   the denominator, \eqn{C_k + D_k}) and `n_k` (stratum size). Strata are in
+#'   ascending order of `z`, including any empty intermediate ones.
+#' @keywords internal
+#' @noRd
+.partgam_one <- function(x, y, z, m, G, tG, strata = FALSE) {
+  zc <- z - min(z) + 1L
+  nz <- max(zc)
+  counts <- tabulate(
+    (zc - 1L) * m * m + y * m + x + 1L,
+    nbins = m * m * nz
+  )
+  dim(counts) <- c(m, m, nz)
+
+  conc <- 0
+  disc <- 0
+  if (strata) {
+    gamma_k <- rep(NA_real_, nz)
+    weight_k <- rep(0, nz)
+    n_k <- rep(0L, nz)
+  }
+
+  for (s in seq_len(nz)) {
+    N <- counts[, , s]
+    n_s <- sum(N)
+    if (strata) n_k[s] <- n_s
+    # A stratum holding fewer than two observations contributes no pairs.
+    if (n_s < 2L) next
+    A <- G %*% N
+    c_s <- sum(N * (A %*% tG))
+    d_s <- sum(N * (A %*% G))
+    conc <- conc + c_s
+    disc <- disc + d_s
+    if (strata) {
+      weight_k[s] <- c_s + d_s
+      # A stratum can hold observations yet no comparable pair, for instance
+      # when every respondent in it gave the same answer to one of the items.
+      if (c_s + d_s > 0) gamma_k[s] <- (c_s - d_s) / (c_s + d_s)
+    }
+  }
+
+  total <- conc + disc
+  gamma <- if (total == 0) NA_real_ else (conc - disc) / total
+
+  if (!strata) {
+    return(gamma)
+  }
+  list(gamma = gamma, gamma_k = gamma_k, weight_k = weight_k, n_k = n_k)
+}
+
+#' Summarise sign homogeneity across strata for one item pair
+#'
+#' Davis's partial gamma pools concordant and discordant counts over strata, so
+#' it is interpretable as a partial correlation only when the stratum-specific
+#' associations point the same way. Kreiner (personal communication, 2026)
+#' states the condition directly: the stratum gammas need not be equal, but they
+#' must be either positive or negative throughout, and if some are negative
+#' while others are zero or positive the pooled value is not a meaningful
+#' measure of partial correlation.
+#'
+#' Two cautions on reading the result. Stratum gammas estimated from a handful
+#' of respondents change sign readily by chance, so at small sample sizes a
+#' heterogeneous verdict is weak evidence of a real violation. And under the
+#' null the stratum gammas are zero in the population, so mixed sample signs are
+#' expected there and carry no meaning.
+#'
+#' @param st A list from `.partgam_one(strata = TRUE)`.
+#' @return A one-row data.frame with `n_strata` (strata contributing at least
+#'   one comparable pair), `n_pos`, `n_neg`, `n_zero`, `homogeneous` (no
+#'   stratum positive while another is negative) and `w_opposing`, the share of
+#'   the pooled denominator held by strata whose sign opposes the pooled one.
+#'   `w_opposing` is `NA_real_` when the pooled gamma is zero or undefined.
+#' @keywords internal
+#' @noRd
+.partgam_strata_summary <- function(st) {
+  ok <- !is.na(st$gamma_k)
+  g <- st$gamma_k[ok]
+  w <- st$weight_k[ok]
+
+  n_pos <- sum(g > 0)
+  n_neg <- sum(g < 0)
+
+  pooled_sign <- if (is.na(st$gamma)) NA_real_ else sign(st$gamma)
+  w_opposing <- if (is.na(pooled_sign) || pooled_sign == 0 || sum(w) == 0) {
+    NA_real_
+  } else {
+    sum(w[sign(g) == -pooled_sign]) / sum(w)
+  }
+
+  data.frame(
+    n_strata = length(g),
+    n_pos = n_pos,
+    n_neg = n_neg,
+    n_zero = sum(g == 0),
+    homogeneous = !(n_pos > 0 && n_neg > 0),
+    w_opposing = w_opposing,
+    stringsAsFactors = FALSE,
+    row.names = NULL
   )
 }
 
@@ -946,7 +1285,16 @@ RMlocdepGammaCutoff <- function(
 #'   character string on failure.
 #' @keywords internal
 run_single_partgam_LD_sim <- function(seed, data_list) {
-  set.seed(seed)
+  # The RNG kind is pinned, not just the seed: mirai daemons start under
+  # L'Ecuyer-CMRG while the calling session uses the Mersenne-Twister
+  # default, so seeding alone would make the parallel and sequential paths
+  # draw different streams from the same `seed`.
+  set.seed(
+    seed,
+    kind = "Mersenne-Twister",
+    normal.kind = "Inversion",
+    sample.kind = "Rejection"
+  )
 
   thetas_res <- sample(
     data_list$thetas,
@@ -988,26 +1336,27 @@ run_single_partgam_LD_sim <- function(seed, data_list) {
         }
       }
 
-      # Compute partial gamma LD via iarm.
-      # iarm::partgam_LD() prints its result tables to stdout on every call;
-      # silence it. `finally` restores the sink even if the call errors (the
-      # outer tryCatch then reports the failure as usual).
-      sink(nullfile())
-      pgam <- tryCatch(
-        iarm::partgam_LD(sim_df),
-        finally = sink()
-      )
-
-      # Use direction 1 (rest score = total - Item2) as the canonical direction
-      pgam_df <- as.data.frame(pgam[[1]])
-
-      data.frame(
-        Item1 = as.character(pgam_df$Item1),
-        Item2 = as.character(pgam_df$Item2),
-        gamma = as.numeric(pgam_df$gamma),
-        stringsAsFactors = FALSE,
-        row.names = NULL
-      )
+      # The pair statistic is the larger of the two conditioning directions.
+      # Local dependence violates both of the conditional independence
+      # hypotheses that the Rasch model implies for a pair (Kreiner &
+      # Christensen, 2004), so a pair is tested once, on whichever direction
+      # shows the stronger association. Taking the maximum within the same
+      # simulated dataset gives the null of that maximum directly, so nothing
+      # has to be corrected for having looked at two directions.
+      #
+      # Computed with the vectorised internal rather than
+      # `iarm::partgam_LD()`: the coefficients are identical (see
+      # test-ld_partgam_gamma.R), but iarm costs around 300 ms per call against
+      # a few milliseconds here, and it is called once per iteration.
+      g1 <- .partgam_ld_gamma(sim_df, direction = 1L)
+      g2 <- .partgam_ld_gamma(sim_df, direction = 2L)
+      # direction 2 enumerates the same pairs with the items swapped, so it is
+      # matched on the unordered pair rather than on row order.
+      key <- function(a, b) paste(pmin(a, b), pmax(a, b), sep = "___")
+      g1$gamma <- pmax(g1$gamma,
+                       g2$gamma[match(key(g1$Item1, g1$Item2),
+                                      key(g2$Item1, g2$Item2))])
+      g1
     },
     error = function(e) {
       as.character(conditionMessage(e))
@@ -1327,14 +1676,21 @@ RMlocdepGammaPlot <- function(simfit, data, items = NULL, n_pairs = NULL) {
     options(rgl.useNULL = TRUE)
     on.exit(options(rgl.useNULL = old_rgl), add = TRUE)
 
-    sink(nullfile())
-    pgam_raw <- iarm::partgam_LD(as.data.frame(data))
-    sink()
+    # The simulated distribution is the null of the pair statistic, the larger
+    # of the two conditioning directions, so the observed overlay has to be the
+    # same quantity rather than one direction's coefficient.
+    dc <- data[stats::complete.cases(data), , drop = FALSE]
+    o1 <- .partgam_ld_gamma(dc, direction = 1L)
+    o2 <- .partgam_ld_gamma(dc, direction = 2L)
+    pkey <- function(a, b) paste(pmin(a, b), pmax(a, b), sep = "___")
 
     observed_df <- data.frame(
-      Item1 = as.character(pgam_raw[[1L]]$Item1),
-      Item2 = as.character(pgam_raw[[1L]]$Item2),
-      observed_gamma = as.numeric(pgam_raw[[1L]]$gamma),
+      Item1 = o1$Item1,
+      Item2 = o1$Item2,
+      observed_gamma = pmax(
+        o1$gamma,
+        o2$gamma[match(pkey(o1$Item1, o1$Item2), pkey(o2$Item1, o2$Item2))]
+      ),
       stringsAsFactors = FALSE
     )
     observed_df$Pair <- paste(observed_df$Item1, "-", observed_df$Item2)

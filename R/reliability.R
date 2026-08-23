@@ -176,6 +176,8 @@ RMUreliability <- function(input_draws, level = 0.95, verbose = FALSE) {
 #'   `getOption("mc.cores")` is checked first; if neither is set,
 #'   bootstrapping falls back to sequential.
 #' @param seed Integer or `NULL`. Master random seed for reproducibility.
+#'   See [easyRasch2-reproducibility] for what this guarantees and how it
+#'   interacts with `parallel`.
 #' @param verbose Logical. Print progress messages and a progress bar for
 #'   the bootstrap. Default `FALSE`.
 #' @param theta_range Numeric length-2 vector. Theta limits passed to
@@ -298,6 +300,15 @@ RMreliability <- function(
   options(rgl.useNULL = TRUE)
   on.exit(options(rgl.useNULL = old_rgl), add = TRUE)
 
+  # A NULL `seed` is resolved here rather than left to inherit the session
+  # stream. The plausible-value sampler below advances that stream
+  # nondeterministically (see the comment at the RMU block), so without a
+  # seed of its own everything after it would differ between two calls made
+  # under the same set.seed().
+  if (is.null(seed)) {
+    seed <- sample.int(.Machine$integer.max - 2L, 1L)
+  }
+
   # --- Full-sample fits ------------------------------------------------------
   mirt_fit <- mirt::mirt(
     data = data,
@@ -316,9 +327,7 @@ RMreliability <- function(
   alpha <- cronbach_alpha(data)
 
   # --- Plausible values + RMU ------------------------------------------------
-  if (!is.null(seed)) {
-    set.seed(seed)
-  }
+  set.seed(seed)
   pvs <- mirt::fscores(
     mirt_fit,
     method = estim,
@@ -334,9 +343,7 @@ RMreliability <- function(
   # stream advancement is not), so the RMU column splits below would differ
   # between identical calls. Re-seed to make the whole result reproducible;
   # + 2L keeps the stream distinct from the bootstrap's seed + 1L.
-  if (!is.null(seed)) {
-    set.seed(seed + 2L)
-  }
+  set.seed(seed + 2L)
 
   rmu_iter_results <- do.call(
     rbind,
@@ -383,9 +390,7 @@ RMreliability <- function(
       }
     }
 
-    if (!is.null(seed)) {
-      set.seed(seed + 1L)
-    }
+    set.seed(seed + 1L)
     boot_seeds <- sample.int(.Machine$integer.max, boot_iter)
 
     boot_args <- list(
@@ -597,7 +602,16 @@ RMreliability <- function(
 #' @keywords internal
 #' @noRd
 run_single_reliability_boot <- function(seed, data_list) {
-  set.seed(seed)
+  # The RNG kind is pinned, not just the seed: mirai daemons start under
+  # L'Ecuyer-CMRG while the calling session uses the Mersenne-Twister
+  # default, so seeding alone would make the parallel and sequential paths
+  # draw different streams from the same `seed`.
+  set.seed(
+    seed,
+    kind = "Mersenne-Twister",
+    normal.kind = "Inversion",
+    sample.kind = "Rejection"
+  )
   idx <- sample.int(nrow(data_list$data), nrow(data_list$data), replace = TRUE)
   dat_b <- data_list$data[idx, , drop = FALSE]
 
