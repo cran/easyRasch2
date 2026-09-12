@@ -114,8 +114,8 @@ remotes::install_github("pgmj/easyRasch2")
 - `RMdimMartinLof()` + `RMdimMartinLofResiduals()` — Martin-Löf LR test
   (Christensen & Kreiner, 2007), supports polytomous data with Monte Carlo
   *p*-values
-- `RMdimCFACutoff()` + `RMdimCFA()` + `RMdimCFAPlot()` — posterior-predictive
-  CFA fit-index and per-item loading checks under PCM unidimensionality (via
+- `RMdimCFACutoff()` + `RMdimCFA()` + `RMdimCFAPlot()` — 
+  CFA fit-indices and per-item loading checks under PCM unidimensionality (via
   `lavaan` WLSMV) with simulation-based cutoffs and optional bootstrap
   *p*-values
 
@@ -139,8 +139,19 @@ remotes::install_github("pgmj/easyRasch2")
 
 - `RMreliability()` + `RMUreliability()` — Cronbach's α, PSI, marginal
   reliability, and Relative Measurement Uncertainty from plausible values
+- `RMreliabilityCurve()` — conditional SEM, test information, or conditional
+  reliability across the latent scale, with the respondent distribution behind
+  it and an optional bootstrap band
 - `RMtargeting()` — Wright-map style person-item targeting plot
 - `RMscoreSE()` — raw-score → logit transformation table (WLE / EAP)
+
+### Individual change
+
+- `RMpersonChange()` — per-respondent change between two occasions, with the
+  null stated explicitly and critical values simulated rather than assumed
+  normal
+- `RMretestSD()` — occasion-to-occasion SD from a test-retest study, the input
+  to `RMpersonChange(null = "retest")`
 
 ### Item & person parameters
 
