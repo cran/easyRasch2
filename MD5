@@ -1,6 +1,6 @@
-0788afb35ab557fdef13ac211cd8abfe *DESCRIPTION
+5e8ca3fa909a2756dd39d25487e5ace2 *DESCRIPTION
 5c6f65f5a1a1d1deb4436a4664e97b60 *NAMESPACE
-757a84d72b16524cbcf0c346448c87f0 *NEWS.md
+17fbea68f1d999fc32b09bda08708ef3 *NEWS.md
 fc1c9a65d304d8c615373d99d200bae4 *R/bootstrap_restscore.R
 4aa27874be08c06aba93852b07cb3f6f *R/cfa_cutoff.R
 27b319fb221a30d8e7813c7c141bdc9b *R/cicc_plot.R
@@ -27,8 +27,8 @@ fc93673987df2eb04b3f81420966fd3b *R/item_restscore.R
 983e3d6f258a909260b5842b27dfae4c *R/person_change_exact.R
 92a7ab10cae5d2331b8cc95cae3bec0a *R/person_fit.R
 86fdac936ca2b87909babc3d4addb76d *R/person_parameters.R
-eec69be3c027038ec2caac7851c97b8f *R/reliability.R
-1c21b2b6fbfa6cc429944fae62b2fd67 *R/reliability_curve.R
+6f2d0583d1b5c5f5f8c1c3d167e325e6 *R/reliability.R
+7a785e2d115d143abfb2b9e60089b92e *R/reliability_curve.R
 07124832adf269c58815e2aab368ab93 *R/residual_pca.R
 77319d66f1fb522e06e913921cc0f662 *R/retest_sd.R
 e3122a4bc95e3978b9c4b93e7cc96263 *R/score_se.R
@@ -38,7 +38,7 @@ adac52243c43a04ffea15127b9165852 *R/utils-iarm.R
 8b40f68001620b7dbf9f638eac9c4676 *R/utils-multiplicity.R
 31f95d1da3e03171a56551ffbfa2cd16 *R/utils-simulation.R
 d3dfec1170f9078befb17fe69749ff2e *R/utils-theme.R
-a60f2293d0a5fca65a1cc67079e215eb *R/utils-theta.R
+346c6b2e8ca44662523a6c1ed8bf4260 *R/utils-theta.R
 676a7eb9274cbe0efc12a0bfd4ed9c15 *R/utils-validation.R
 b28176111abaffe66a9903cf4a0e8def *R/zzz.R
 f2eb349d707a6b8072695fe7abdbe76a *R/zzz_renaming.R
@@ -47,8 +47,8 @@ f2eb349d707a6b8072695fe7abdbe76a *R/zzz_renaming.R
 21c9401b8c07f38d762ade4612fc4ffe *build/partial.rdb
 fefca671625d0b856eb95b7e2b8b138f *build/vignette.rds
 35f36d480f4fff002cf602a47dfa9d2b *data/phq9.rda
-8a3eb844b014953de2c875f4dc0933f0 *inst/doc/easyRasch2.Rmd
-f72c7eb2f125d306427a7363747fb673 *inst/doc/easyRasch2.html
+c9c918c0121013ccb6e6673bfedb31a4 *inst/doc/easyRasch2.Rmd
+5d30036c68eed44d6bc473a0359b6f4c *inst/doc/easyRasch2.html
 c51e9a4620de0887bbc1e7dc67eb6ba0 *man/RMUreliability.Rd
 fe3cd2d48f5436e7847a4285ab71259b *man/RMdifGamma.Rd
 b3ff9c0402350e6b1e32004ce7908f54 *man/RMdifGammaCutoff.Rd
@@ -85,8 +85,8 @@ a0023c53bdee9afdd6f32449e07b93b8 *man/RMpersonParameters.Rd
 1641f34c4af8fb355671a5ac580fa642 *man/RMplotBar.Rd
 3eb453f0e702df72174e01db5a172c4e *man/RMplotStackedbar.Rd
 9d9c50aeb4e2124a5dda5d7fc68787b6 *man/RMplotTile.Rd
-3f27437b5e9d30079b0be3e906bd008c *man/RMreliability.Rd
-3bff9832b31406fc75dde3506688cd04 *man/RMreliabilityCurve.Rd
+34225dc65d386ff049255899baed72bd *man/RMreliability.Rd
+0e271f8b1833b30a6f713315a229a87b *man/RMreliabilityCurve.Rd
 9d1834087e08f9136746d04f1bef300e *man/RMretestSD.Rd
 c9b2b878131f9e24cf279ed7cb68ee0c *man/RMscoreSE.Rd
 4170c0816f3f4d42f153b13a05362aad *man/RMtargeting.Rd
@@ -144,8 +144,8 @@ df86a2212d14cc52d6319c9c7405c16f *tests/testthat/test-martin_lof.R
 c4f12e2c27395d6445615bacace022e5 *tests/testthat/test-partgam_ld.R
 36fa36692f5a608d9d53d1b8aa8e6549 *tests/testthat/test-person_change.R
 b3e7394ab8e0eb578467b6c89fe0b3a7 *tests/testthat/test-person_fit.R
-ec874f0dc7aace69682e6897f3a46192 *tests/testthat/test-reliability.R
-0232f591d20929f4b0c3f2dd4a36e7ae *tests/testthat/test-reliability_curve.R
+817d492f04c59ec2f4af8852f04b22c2 *tests/testthat/test-reliability.R
+642d251d317dc6f57088062a1ed91f97 *tests/testthat/test-reliability_curve.R
 06ca783f9ec80c0a8de5b99acbefbb9a *tests/testthat/test-residual_pca.R
 1d6adbeffe88f59b51855e5880e05964 *tests/testthat/test-retest_sd.R
 3108fe7d55f50558df82a427fed8d13d *tests/testthat/test-rounding.R
@@ -154,7 +154,7 @@ ae365fea855bd5e20637330b58e407c8 *tests/testthat/test-score_se.R
 a9b971386ccab634d62260b7cabca529 *tests/testthat/test-startup.R
 65488baadb3080e92eb3c2f29641fb03 *tests/testthat/test-targeting.R
 09ead567736d4b62f478d17730b5b91a *tests/testthat/test-tile_plot.R
-8a3eb844b014953de2c875f4dc0933f0 *vignettes/easyRasch2.Rmd
+c9c918c0121013ccb6e6673bfedb31a4 *vignettes/easyRasch2.Rmd
 30ac6432b70791c90e5a340a720a0fa5 *vignettes/easyRasch2.Rmd.orig
 6819ca0c08e0c265af98b990ba5cf72d *vignettes/figures/rasch-bar-plot-1.png
 44835f612c8a8abc25ea91d4b5f66977 *vignettes/figures/rasch-dif-cicc-1.png
@@ -164,7 +164,7 @@ a9b971386ccab634d62260b7cabca529 *tests/testthat/test-startup.R
 9f16b18a0b57c9830a3ee694d628c726 *vignettes/figures/rasch-pca-plot-1.png
 9146aefe2db2596b27d1a412d0046540 *vignettes/figures/rasch-personfit-1.png
 9ad43c4a1736645fa56e04c0f060b8e6 *vignettes/figures/rasch-plot_q3-1.png
-2e4771dac19db7cd5bed14a45f082fde *vignettes/figures/rasch-relcurve-1.png
+b285aa6481276d2a97ff6c6d1a2ad25e *vignettes/figures/rasch-relcurve-1.png
 dbfc8359bff6d6a4db004d283a272baf *vignettes/figures/rasch-scoreSE-1.png
 989e302269b0f9a4cd1918a93663eece *vignettes/figures/rasch-stackedbar-plot-1.png
 9d3f3cb6801fc55e0d7b5ef09509afc4 *vignettes/figures/rasch-targeting-1.png

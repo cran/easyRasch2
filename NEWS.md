@@ -1,3 +1,21 @@
+# easyRasch2 1.3.1
+
+## Bug fix
+
+- **`RMreliability()` and `RMreliabilityCurve()` now estimate the latent
+  distribution's mean instead of holding it at 0.** With the mean pinned, the
+  latent SD absorbed any mistargeting, so marginal reliability rose as
+  targeting worsened. It now falls, as PSI does.
+
+  **Values move downward for off-target samples** and barely at all for
+  well-targeted ones, where the `eRm::pcmdat2` example changes in the fourth
+  decimal. On simulated data 2 logits off target, marginal reliability fell
+  from .902 to .726 and the latent SD from 2.02 to 0.96 against a true 0.90.
+
+  `RMreliabilityCurve()` gains a `latent_mean` attribute, and its default
+  `theta_range` is now centred on that mean rather than on zero. The EAP prior
+  is unchanged, so person estimates are unaffected.
+
 # easyRasch2 1.3.0
 
 ## New features

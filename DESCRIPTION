@@ -1,6 +1,6 @@
 Package: easyRasch2
 Title: Psychometric Analysis with Rasch Measurement Theory
-Version: 1.3.0
+Version: 1.3.1
 Authors@R: c(
     person("Magnus", "Johansson",
            role = c("aut", "cre"),
@@ -51,7 +51,7 @@ Config/testthat/edition: 3
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.0.0
 NeedsCompilation: no
-Packaged: 2026-09-12 16:55:09 UTC; magnus.johansson.3
+Packaged: 2026-09-13 15:18:06 UTC; magnus.johansson.3
 Author: Magnus Johansson [aut, cre] (ORCID:
     <https://orcid.org/0000-0003-1669-592X>),
   Nicklas Korsell [ctb] (PCM simulation code),
@@ -64,4 +64,4 @@ Author: Magnus Johansson [aut, cre] (ORCID:
     dif_tree.R, adapted under MIT licence from the effecttree package)
 Maintainer: Magnus Johansson <pgmj@pm.me>
 Repository: CRAN
-Date/Publication: 2026-09-12 17:30:02 UTC
+Date/Publication: 2026-09-13 23:20:02 UTC
