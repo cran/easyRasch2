@@ -21,7 +21,7 @@ null distribution from the fitted Rasch / PCM model and the observed
 sample (Johansson, 2025, 2026).
 
 The [Get Started](https://pgmj.github.io/easyRasch2/articles/easyRasch2.html)
-link above contains a short introduction. For broader Rasch-analysis tutorials,
+link contains a short introduction. For broader Rasch-analysis tutorials,
 see the [vignette](https://pgmj.github.io/raschrvignette/RaschRvign.html) for
 the archived sibling package [`easyRasch`](https://pgmj.github.io/easyRasch/).
 
@@ -94,7 +94,10 @@ remotes::install_github("pgmj/easyRasch2")
   plot
 - `RMitemInfitMI()` + `RMitemInfitCutoffMI()` — multiple-imputation variants
 - `RMitemRestscore()` — item-restscore with Goodman-Kruskal's $\gamma$ (gamma)
+- `RMitemRestscoreCutoff()` + `RMitemRestscorePlot()` — parametric bootstrap
+  null for item-restscore, flagged on corrected bootstrap *p*-values
 - `RMitemRestscoreBoot()` — non-parametric bootstrap of item-restscore fit
+  (descriptive; see its help page)
 - `RMitemICCPlot()` - conditional item characteristic curves
 
 ### Local dependence
@@ -148,8 +151,8 @@ remotes::install_github("pgmj/easyRasch2")
 ### Individual change
 
 - `RMpersonChange()` — per-respondent change between two occasions, with the
-  null stated explicitly and critical values simulated rather than assumed
-  normal
+  null stated explicitly and critical values from the exact null rather than
+  assumed normal
 - `RMretestSD()` — occasion-to-occasion SD from a test-retest study, the input
   to `RMpersonChange(null = "retest")`
 

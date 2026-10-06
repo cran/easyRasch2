@@ -1,8 +1,10 @@
-#' Simulation-Based Infit MSQ Cutoff Determination
+#' Simulation-Based Item-Restscore Null Distribution
 #'
-#' Uses parametric bootstrap simulation to determine appropriate cutoff values
-#' for \code{\link{RMitemInfit}}. This function simulates data from a correctly fitting
-#' Rasch model that mimics your data and returns per-item empirical cutoffs.
+#' Uses parametric bootstrap simulation to build the null distribution of the
+#' item-restscore statistic for \code{\link{RMitemRestscore}}. This function
+#' simulates data from a correctly fitting Rasch model that mimics your data
+#' and returns, per item, the simulated difference between observed and
+#' expected item-restscore gamma.
 #'
 #' @param data A data.frame or matrix of item responses. Items must be scored
 #'   starting at 0 (non-negative integers). Only complete cases (rows without
@@ -18,39 +20,41 @@
 #' @param seed Integer or `NULL`. Random seed for reproducibility. See
 #'   [easyRasch2-reproducibility] for what this guarantees and how it
 #'   interacts with `parallel`.
-#' @param cutoff_method Character string specifying how cutoff intervals are
+#' @param cutoff_method Character string specifying how the intervals are
 #'   computed. Either `"hdci"` (default) for the Highest Density Interval via
 #'   `ggdist::hdci()`, or `"quantile"` for the 2.5th/97.5th percentiles via
 #'   `stats::quantile()`.
 #' @param hdci_width Numeric. Width of the HDCI when `cutoff_method = "hdci"`.
 #'   Default is `0.95` (95% HDCI). Ignored when `cutoff_method = "quantile"`.
 #'
-#'   The interval is a **description** of where a fitting item's statistic is
+#'   The interval is a **description** of where a fitting item's difference is
 #'   expected to fall, not a decision rule. Flagging every item outside a
 #'   width-`w` interval tests all `k` items at once, so the family-wise error
-#'   rate is `1 - w^k`, which is 37% for a 95% interval over nine items.
-#'   Decisions should come from the corrected p-value instead
-#'   (\code{\link{RMitemInfit}} with `p_value = NULL` and the full object
-#'   returned here). The default was `0.999` up to and including version
-#'   1.1.1, which needs roughly 5000 iterations before the interval reaches
-#'   its stated width; `0.95` reaches it by about 1000, so the band shown to
-#'   readers means close to what it says (Johansson, 2026).
+#'   rate is `1 - w^k`. Decisions should come from the corrected p-value
+#'   instead (\code{\link{RMitemRestscore}} with `p_value = NULL` and the full
+#'   object returned here).
 #' @param dgp Character. Data-generating process for the parametric bootstrap.
-#'   `"resample"` (default) resamples WLE person locations with replacement and
-#'   simulates responses under the model (a *marginal* null). `"conditional"`
-#'   simulates each respondent's pattern from the exact Rasch conditional
-#'   distribution given their observed total score, item parameters fixed (a
-#'   *conditional* null). Because the conditional infit/outfit statistic is
-#'   itself conditional on the total score, `"conditional"` is its naturally
-#'   matched null. \strong{Experimental.}
+#'   `"conditional"` (default) simulates each respondent's pattern from the
+#'   exact Rasch conditional distribution given their observed total score,
+#'   item parameters fixed (a *conditional* null). The expected gamma is
+#'   computed from the observed score distribution, which the conditional
+#'   null holds fixed. `"resample"` resamples WLE person locations with
+#'   replacement and simulates responses under the model (a *marginal* null).
+#'   In simulation under a true Rasch model, the conditional null gave a
+#'   family-wise rate of 5.0 percent with `correction = "fwer"` and the
+#'   resample null 6.4 percent, pooled over four designs. The conditional
+#'   null takes about 1.2 to 1.6 times as long.
+#'   \strong{Experimental.}
 #'
 #' @return A list with components:
 #' \describe{
-#'   \item{`results`}{data.frame with columns `iteration`, `Item`,
-#'     `InfitMSQ`, `OutfitMSQ` (one row per item per successful iteration).}
-#'   \item{`item_cutoffs`}{data.frame with per-item cutoff summaries: `Item`,
-#'     `infit_low`, `infit_high`, `outfit_low`, `outfit_high`. Bounds are
-#'     computed using the method specified by `cutoff_method`.}
+#'   \item{`results`}{data.frame with columns `iteration`, `Item`, `Observed`,
+#'     `Expected`, `Difference` (one row per item per successful iteration).
+#'     `Difference` is `Observed - Expected`, the statistic
+#'     \code{\link{RMitemRestscore}} tests.}
+#'   \item{`item_cutoffs`}{data.frame with per-item interval bounds for the
+#'     difference: `Item`, `diff_low`, `diff_high`. Bounds are computed using
+#'     the method specified by `cutoff_method`.}
 #'   \item{`actual_iterations`}{Number of successful iterations. Everything
 #'     downstream rests on this rather than on `iterations`, so it is the
 #'     number to report.}
@@ -63,8 +67,8 @@
 #'     any missing values.}
 #'   \item{`sample_summary`}{Summary statistics of estimated person parameters.}
 #'   \item{`item_names`}{Character vector of item names from data.}
-#'   \item{`cutoff_method`}{The method used to compute cutoffs (`"hdci"` or
-#'     `"quantile"`).}
+#'   \item{`cutoff_method`}{The method used to compute the intervals (`"hdci"`
+#'     or `"quantile"`).}
 #'   \item{`hdci_width`}{The HDCI width used (only meaningful when
 #'     `cutoff_method = "hdci"`).}
 #'   \item{`dgp`}{The data-generating process used (`"resample"` or
@@ -72,14 +76,26 @@
 #' }
 #'
 #' @details
+#' The asymptotic test in `iarm::item_restscore()` divides the observed minus
+#' expected gamma by the standard error of the observed gamma alone. The
+#' expected gamma is estimated from the same data and correlates with the
+#' observed one, so that standard error is too large for the difference, and
+#' the difference is also biased upwards in small samples. Under a true Rasch
+#' model the resulting test is liberal for dichotomous items in small or
+#' mistargeted samples and conservative for polytomous items, in every case
+#' flagging too few underfitting items. The bootstrap null replaces the
+#' asymptotic reference distribution and absorbs both problems.
+#'
 #' The generating model is CML item parameters (via `psychotools`) with WLE
 #' person locations. For each iteration a dataset is simulated under the chosen
-#' `dgp`, the model is refitted by CML (`psychotools::pcmodel()`, which handles
-#' dichotomous and polytomous data and is accepted by `iarm`), and conditional
-#' infit and outfit MSQ are computed via `iarm::out_infit()`. The distribution
-#' of these statistics across iterations provides empirical critical values per
-#' item. Failed iterations (e.g., degenerate simulated data) are silently
-#' discarded.
+#' `dgp`, the model is **refitted** by CML (`psychotools::pcmodel()`), and the
+#' observed and expected item-restscore gamma are computed as in
+#' `iarm::item_restscore()`, by a faster internal routine that skips the
+#' standard errors and the rounding of the printed values. The refit matters:
+#' the expected gamma varies from
+#' sample to sample because the thresholds do, and holding them fixed would
+#' reproduce the problem the bootstrap exists to solve. Failed iterations
+#' (e.g., degenerate simulated data) are silently discarded.
 #'
 #' Parallel processing is provided by the `mirai` package (optional). Install
 #' it with `install.packages("mirai")` to enable parallelisation.
@@ -87,15 +103,15 @@
 #' The `iarm` package must be installed (it is in Suggests, not Imports).
 #'
 #' @references
-#' Johansson, M. (2025). Detecting item misfit in Rasch models.
-#' *Educational Methods & Psychometrics, 3*(18).
-#' \doi{10.61186/emp.2025.5}
+#' Kreiner, S. (2011). A Note on Item-Restscore Association in Rasch Models.
+#' *Applied Psychological Measurement, 35*(7), 557-561.
+#' \doi{10.1177/0146621611410227}
 #'
 #' Johansson, M. (2026). Simulation-based cutoffs for conditional item fit in
 #' Rasch models: Iterations, multiplicity correction, and decision stability.
 #' *PsyArXiv*. \doi{10.31234/osf.io/7pqz4_v2}
 #'
-#' @seealso \code{\link{RMitemInfit}}
+#' @seealso \code{\link{RMitemRestscore}}, \code{\link{RMitemRestscorePlot}}
 #'
 #' @export
 #'
@@ -110,15 +126,15 @@
 #'   colnames(sim_data) <- paste0("Item", 1:10)
 #'
 #'   # Run 100 iterations sequentially for a quick demo
-#'   cutoff_res <- RMitemInfitCutoff(sim_data, iterations = 100,
-#'                                   parallel = FALSE, seed = 42)
+#'   cutoff_res <- RMitemRestscoreCutoff(sim_data, iterations = 100,
+#'                                       parallel = FALSE, seed = 42)
 #'   cutoff_res$item_cutoffs
 #'
-#'   # Use the cutoffs in RMitemInfit()
-#'   RMitemInfit(sim_data)
+#'   # Flag on bootstrap p-values in RMitemRestscore()
+#'   RMitemRestscore(sim_data, cutoff = cutoff_res)
 #' }
 #' }
-RMitemInfitCutoff <- function(
+RMitemRestscoreCutoff <- function(
   data,
   iterations = 400,
   parallel = TRUE,
@@ -127,7 +143,7 @@ RMitemInfitCutoff <- function(
   seed = NULL,
   cutoff_method = "hdci",
   hdci_width = 0.95,
-  dgp = c("resample", "conditional")
+  dgp = c("conditional", "resample")
 ) {
   dgp <- match.arg(dgp)
   cutoff_method <- match.arg(cutoff_method, c("hdci", "quantile"))
@@ -143,7 +159,7 @@ RMitemInfitCutoff <- function(
 
   if (!requireNamespace("iarm", quietly = TRUE)) {
     stop(
-      "Package 'iarm' is required for RMitemInfitCutoff() but is not installed.\n",
+      "Package 'iarm' is required for RMitemRestscoreCutoff() but is not installed.\n",
       "Install it with: install.packages(\"iarm\")",
       call. = FALSE
     )
@@ -156,9 +172,9 @@ RMitemInfitCutoff <- function(
   options(rgl.useNULL = TRUE)
   on.exit(options(rgl.useNULL = old_rgl), add = TRUE)
 
-  # Only complete cases (matching RMitemInfit behaviour). Record the raw
-  # total and whether anything was dropped so callers (e.g. RMitemInfitPlot)
-  # can report the sample in the standard `n = X of Y respondents` form.
+  # Only complete cases. iarm::item_restscore() refits on complete cases when
+  # the fitted object contains NA, so the observed statistic in
+  # RMitemRestscore() is complete-case as well.
   n_total <- nrow(as.data.frame(data))
   has_na <- anyNA(data)
   data <- stats::na.omit(data)
@@ -210,11 +226,8 @@ RMitemInfitCutoff <- function(
 
   item_names_vec <- colnames(data_mat)
 
-  # Generating model: CML item thresholds (psychotools), computed once. The
-  # conditional infit statistic is conditional on the total score, so the
-  # "conditional" DGP (simulate each respondent's pattern given their observed
-  # score) is the matched null. The "resample" DGP draws WLE person locations
-  # with replacement and simulates parametrically (a marginal null).
+  # Generating model: CML item thresholds (psychotools), computed once, with
+  # the same two DGPs as RMitemInfitCutoff().
   pool <- .wle_theta_pool(data_mat)
   thr_list <- pool$thr_list
   wle_thetas <- pool$thetas
@@ -239,7 +252,7 @@ RMitemInfitCutoff <- function(
   }
 
   if (use_parallel) {
-    results_raw <- run_infit_sim_parallel(
+    results_raw <- run_restscore_sim_parallel(
       iterations,
       sim_seeds,
       sim_data_list,
@@ -247,7 +260,7 @@ RMitemInfitCutoff <- function(
       verbose
     )
   } else {
-    results_raw <- run_infit_sim_sequential(
+    results_raw <- run_restscore_sim_sequential(
       iterations,
       sim_seeds,
       sim_data_list,
@@ -272,40 +285,39 @@ RMitemInfitCutoff <- function(
     df
   })
   results_df <- do.call(rbind, iter_dfs)
+  results_df <- results_df[, c(
+    "iteration",
+    "Item",
+    "Observed",
+    "Expected",
+    "Difference"
+  )]
   rownames(results_df) <- NULL
 
-  # Compute per-item cutoffs
-  item_names <- unique(results_df$Item)
+  # Per-item interval for the difference
   item_cutoffs <- do.call(
     rbind,
-    lapply(item_names, function(item) {
-      sub <- results_df[results_df$Item == item, ]
+    lapply(item_names_vec, function(item) {
+      d <- results_df$Difference[results_df$Item == item]
+      d <- d[is.finite(d)]
       if (cutoff_method == "hdci") {
         # ggdist::hdci() returns a matrix with ncol = 2: column 1 is the lower
         # bound, column 2 is the upper bound. Row 1 contains the continuous
         # interval.
-        infit_interval <- ggdist::hdci(sub$InfitMSQ, .width = hdci_width)
-        outfit_interval <- ggdist::hdci(sub$OutfitMSQ, .width = hdci_width)
-        data.frame(
-          Item = item,
-          infit_low = infit_interval[1L, 1L],
-          infit_high = infit_interval[1L, 2L],
-          outfit_low = outfit_interval[1L, 1L],
-          outfit_high = outfit_interval[1L, 2L],
-          stringsAsFactors = FALSE,
-          row.names = NULL
-        )
+        interval <- ggdist::hdci(d, .width = hdci_width)
+        lo <- interval[1L, 1L]
+        hi <- interval[1L, 2L]
       } else {
-        data.frame(
-          Item = item,
-          infit_low = stats::quantile(sub$InfitMSQ, 0.025, na.rm = TRUE),
-          infit_high = stats::quantile(sub$InfitMSQ, 0.975, na.rm = TRUE),
-          outfit_low = stats::quantile(sub$OutfitMSQ, 0.025, na.rm = TRUE),
-          outfit_high = stats::quantile(sub$OutfitMSQ, 0.975, na.rm = TRUE),
-          stringsAsFactors = FALSE,
-          row.names = NULL
-        )
+        lo <- stats::quantile(d, 0.025, names = FALSE)
+        hi <- stats::quantile(d, 0.975, names = FALSE)
       }
+      data.frame(
+        Item = item,
+        diff_low = lo,
+        diff_high = hi,
+        stringsAsFactors = FALSE,
+        row.names = NULL
+      )
     })
   )
   rownames(item_cutoffs) <- NULL
@@ -330,14 +342,14 @@ RMitemInfitCutoff <- function(
 # Internal: single simulation iteration
 # ---------------------------------------------------------------------------
 
-#' Run a single infit simulation iteration
+#' Run a single item-restscore simulation iteration
 #'
 #' @param seed Integer seed for reproducibility.
-#' @param data_list List produced inside [RMitemInfitCutoff()].
-#' @return A data.frame with columns `Item`, `InfitMSQ`, `OutfitMSQ`, or a
-#'   character string on failure.
+#' @param data_list List produced inside [RMitemRestscoreCutoff()].
+#' @return A data.frame with columns `Item`, `Observed`, `Expected`,
+#'   `Difference`, or a character string on failure.
 #' @keywords internal
-run_single_infit_sim <- function(seed, data_list) {
+run_single_restscore_sim <- function(seed, data_list) {
   # The RNG kind is pinned, not just the seed: mirai daemons start under
   # L'Ecuyer-CMRG while the calling session uses the Mersenne-Twister
   # default, so seeding alone would make the parallel and sequential paths
@@ -400,16 +412,21 @@ run_single_infit_sim <- function(seed, data_list) {
         }
       }
 
-      # Conditional infit/outfit from a CML refit. psychotools::pcmodel() handles
-      # both polytomous and dichotomous (a 2-category PCM is the Rasch model) and
-      # is accepted by iarm::out_infit(); it matches eRm to ~1e-6 but is faster.
-      model_fit <- psychotools::pcmodel(sim_df)
-      cfit <- iarm::out_infit(model_fit)
+      # CML refit, then observed and expected gamma. The refit is what makes
+      # the expected gamma vary across iterations as it does across samples.
+      model_fit <- psychotools::pcmodel(sim_df, hessian = FALSE)
+      res_mat <- .restscore_gamma(
+        sim_df,
+        lapply(psychotools::threshpar(model_fit), cumsum)
+      )
+      observed <- res_mat[, "observed"]
+      expected <- res_mat[, "expected"]
 
       data.frame(
         Item = data_list$item_names,
-        InfitMSQ = round(cfit$Infit, 3),
-        OutfitMSQ = round(cfit$Outfit, 3),
+        Observed = observed,
+        Expected = expected,
+        Difference = observed - expected,
         stringsAsFactors = FALSE,
         row.names = NULL
       )
@@ -421,10 +438,95 @@ run_single_infit_sim <- function(seed, data_list) {
 }
 
 # ---------------------------------------------------------------------------
+# Internal: observed and expected item-restscore gamma
+# ---------------------------------------------------------------------------
+
+#' Observed and expected item-restscore gamma
+#'
+#' Computes the two gammas that `iarm::item_restscore()` reports, without its
+#' standard errors and p-values, which the bootstrap does not use. iarm's
+#' `pscore_poly()` recomputes two full sets of elementary symmetric functions
+#' for every cell of every item's restscore-by-category table. Here they are
+#' computed once for all items and once per item with that item left out,
+#' which makes the call about 50 times faster. The values agree with iarm's
+#' unrounded ones to machine precision. iarm itself returns them through
+#' `format(digits = 3)`, so they are rounded by an amount that depends on the
+#' smallest p-value in the same table.
+#'
+#' @param X Complete-case integer response matrix, scored from 0.
+#' @param coeff List of cumulative threshold parameters per item, as
+#'   `lapply(psychotools::threshpar(fit), cumsum)`.
+#' @return Matrix with columns `observed` and `expected`, one row per item.
+#' @keywords internal
+#' @noRd
+.restscore_gamma <- function(X, coeff) {
+  X <- as.matrix(X)
+  storage.mode(X) <- "integer"
+  k <- ncol(X)
+  mi <- vapply(coeff, length, integer(1L))
+  # pcmodel() drops the threshold of an unobserved middle category, so an
+  # item's top score can exceed its threshold count; the tables below would
+  # then be silently truncated.
+  if (!identical(unname(apply(X, 2L, max)), unname(mi))) {
+    stop(
+      "Each item's highest response must equal its number of thresholds.",
+      call. = FALSE
+    )
+  }
+  m <- sum(mi)
+  score <- rowSums(X)
+  score_n <- tabulate(score + 1L, nbins = m + 1L)
+  g_all <- psychotools::elementary_symmetric_functions(coeff)[[1L]]
+
+  observed <- expected <- numeric(k)
+  for (i in seq_len(k)) {
+    nx <- mi[i] + 1L
+    nr <- m - mi[i] + 1L
+    # Observed restscore (rows) by item response (columns)
+    N <- matrix(
+      tabulate((score - X[, i]) * nx + X[, i] + 1L, nbins = nr * nx),
+      ncol = nx,
+      byrow = TRUE
+    )
+    observed[i] <- .gk_gamma(N)
+
+    # Expected table: score-group sizes times the conditional probability of
+    # each response given the total score r + x,
+    # P(x | r + x) = w_x * gamma_r(rest) / gamma_{r+x}(all).
+    g_rest <- psychotools::elementary_symmetric_functions(coeff[-i])[[1L]]
+    w <- exp(-c(0, coeff[[i]]))
+    tot <- outer(0:(nr - 1L), 0:mi[i], `+`)
+    pmat <- outer(g_rest, w) / matrix(g_all[tot + 1L], ncol = nx)
+    nmat <- matrix(score_n[tot + 1L], ncol = nx)
+    expected[i] <- .gk_gamma(nmat * pmat)
+  }
+  cbind(observed = observed, expected = expected)
+}
+
+#' Goodman-Kruskal gamma of a two-way table
+#'
+#' Rows and columns are both taken as ordered. Each unordered pair of
+#' observations is counted once, as in `.partgam_one()`.
+#'
+#' @param N Numeric matrix of (possibly non-integer) counts.
+#' @return Gamma, or `NA_real_` when there are no concordant and no discordant
+#'   pairs.
+#' @keywords internal
+#' @noRd
+.gk_gamma <- function(N) {
+  upper <- function(d) outer(seq_len(d), seq_len(d), function(a, b) b > a) + 0
+  A <- upper(nrow(N)) %*% N
+  Gc <- upper(ncol(N))
+  conc <- sum(N * (A %*% t(Gc)))
+  disc <- sum(N * (A %*% Gc))
+  if (conc + disc == 0) NA_real_ else (conc - disc) / (conc + disc)
+}
+
+# ---------------------------------------------------------------------------
 # Internal: parallel runner
 # ---------------------------------------------------------------------------
 
-#' Run infit simulations in parallel using mirai
+#' Run item-restscore simulations in parallel using mirai
 #'
 #' @param iterations Number of iterations.
 #' @param sim_seeds Integer vector of per-iteration seeds.
@@ -433,7 +535,7 @@ run_single_infit_sim <- function(seed, data_list) {
 #' @param verbose Show progress bar.
 #' @return List of raw results (one element per iteration).
 #' @keywords internal
-run_infit_sim_parallel <- function(
+run_restscore_sim_parallel <- function(
   iterations,
   sim_seeds,
   sim_data_list,
@@ -449,25 +551,26 @@ run_infit_sim_parallel <- function(
     completed <- 0L
   }
 
-  # Submit all tasks
   tasks <- lapply(seq_len(iterations), function(sim) {
     mirai::mirai(
       {
-        run_single_infit_sim(seed, data_list)
+        options(rgl.useNULL = TRUE)
+        run_single_restscore_sim(seed, data_list)
       },
       seed = sim_seeds[sim],
       data_list = sim_data_list,
-      run_single_infit_sim = run_single_infit_sim,
+      run_single_restscore_sim = run_single_restscore_sim,
       sim_partial_score = sim_partial_score,
       sim_poly_item = sim_poly_item,
-      # Conditional-DGP generators (shared with the Q3 cutoff).
+      # Conditional-DGP generators (shared with the Q3 and infit cutoffs).
       .sim_cond_dataset = .sim_cond_dataset,
       .sim_conditional = .sim_conditional,
-      .esf_convolve = .esf_convolve
+      .esf_convolve = .esf_convolve,
+      .restscore_gamma = .restscore_gamma,
+      .gk_gamma = .gk_gamma
     )
   })
 
-  # Collect results
   results <- vector("list", iterations)
   for (sim in seq_len(iterations)) {
     result <- mirai::call_mirai(tasks[[sim]])$data
@@ -494,7 +597,7 @@ run_infit_sim_parallel <- function(
 # Internal: sequential runner
 # ---------------------------------------------------------------------------
 
-#' Run infit simulations sequentially
+#' Run item-restscore simulations sequentially
 #'
 #' @param iterations Number of iterations.
 #' @param sim_seeds Integer vector of per-iteration seeds.
@@ -502,7 +605,7 @@ run_infit_sim_parallel <- function(
 #' @param verbose Show progress bar.
 #' @return List of raw results (one element per iteration).
 #' @keywords internal
-run_infit_sim_sequential <- function(
+run_restscore_sim_sequential <- function(
   iterations,
   sim_seeds,
   sim_data_list,
@@ -514,7 +617,7 @@ run_infit_sim_sequential <- function(
 
   results <- vector("list", iterations)
   for (sim in seq_len(iterations)) {
-    results[[sim]] <- run_single_infit_sim(sim_seeds[sim], sim_data_list)
+    results[[sim]] <- run_single_restscore_sim(sim_seeds[sim], sim_data_list)
     if (verbose) {
       utils::setTxtProgressBar(pb, sim)
     }
